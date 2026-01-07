@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Burn: Habit Tracker</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <!-- PWA Stuff -->
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="data:," />
+    <meta name="theme-color" content="#4c4cff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+
+    <!-- Service Worker -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () =>
+          navigator.serviceWorker.register("/sw.js")
+        );
+      }
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Burn</h1>
+        <button id="theme-toggle" title="Toggle dark mode">🌙</button>
+      </header>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="habits">Habits</button>
+        <button class="tab-btn" data-tab="stats">Stats</button>
+      </div>
+
+      <div id="habits-tab" class="tab-content active">
+        <ul id="habit-list"></ul>
+      </div>
+
+      <div id="stats-tab" class="tab-content">
+        <div id="stats-content">
+          <h2>Your Empire</h2>
+          <div id="stats-grid"></div>
+          <div id="calendar-heatmap"></div>
+
+          <div style="margin-top: 40px; text-align: center">
+            <button
+              id="export-btn"
+              style="
+                background: #ff6b35;
+                color: white;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 50px;
+                margin: 0 10px;
+                font-weight: bold;
+                font-size: 15px;
+              "
+            >
+              Export Streaks ↓
+            </button>
+            <button
+              id="import-btn"
+              style="
+                background: #4c4cff;
+                color: white;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 50px;
+                margin: 0 10px;
+                font-weight: bold;
+                font-size: 15px;
+              "
+            >
+              Import ↑
+            </button>
+            <input
+              type="file"
+              id="import-file"
+              accept=".json"
+              style="display: none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div
+        style="
+          text-align: center;
+          margin-top: 50px;
+          font-size: 13px;
+          color: #888;
+          padding: 20px;
+          border-top: 1px solid rgba(255, 255, 255, 0.2);
+        "
+      >
+        Burn v1.0 — Built with ❤️ by AHF Enterprises •
+        <a href="privacy.html" style="color: #4c4cff">Privacy Policy</a>
+      </div>
+    </div>
+
+    <!-- FAB -->
+    <button id="add-fab">+</button>
+
+    <!-- Add Input with Grid Pickers -->
+    <div class="add-input" id="add-input">
+      <input id="habit-input" type="text" placeholder="New habit..." />
+      <div class="picker-label">Pick an emoji:</div>
+      <div class="emoji-grid" id="emoji-grid"></div>
+      <div class="picker-label">Pick a color:</div>
+      <div class="color-grid" id="color-grid"></div>
+      <button id="add-btn">Add</button>
+    </div>
+
+    <!-- Install Button -->
+    <button
+      id="install-btn"
+      style="
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 16px 28px;
+        background: #ff6b35;
+        color: white;
+        border: none;
+        border-radius: 50px;
+        font-weight: bold;
+        box-shadow: 0 8px 30px rgba(255, 107, 53, 0.4);
+        display: none;
+        z-index: 1000;
+        font-size: 16px;
+      "
+    >
+      Install Burn 🔥
+    </button>
+
+    <!-- Scripts -->
+    <script>
+      async function enableReminders() {
+        if (Notification.permission === "default")
+          await Notification.requestPermission();
+        if (Notification.permission === "granted" && navigator.serviceWorker) {
+          const reg = await navigator.serviceWorker.ready;
+          reg.active?.postMessage("start-reminders");
+        }
+      }
+      document.addEventListener("DOMContentLoaded", enableReminders);
+
+      document.getElementById("add-fab").addEventListener("click", () => {
+        document.getElementById("add-input").classList.toggle("show");
+      });
+    </script>
+
+    <script src="script.js"></script>
+  </body>
+</html>
