@@ -109,13 +109,22 @@
     <!-- FAB -->
     <button id="add-fab">+</button>
 
-    <!-- Add Input with Grid Pickers -->
+    <!-- Add Input with Schedule Picker -->
     <div class="add-input" id="add-input">
       <input id="habit-input" type="text" placeholder="New habit..." />
       <div class="picker-label">Pick an emoji:</div>
       <div class="emoji-grid" id="emoji-grid"></div>
       <div class="picker-label">Pick a color:</div>
       <div class="color-grid" id="color-grid"></div>
+      <div class="picker-label">How often?</div>
+      <select id="habit-schedule">
+        <option value="daily">Every day</option>
+        <option value="every2days">Every 2 days</option>
+        <option value="weekly3">3 times per week</option>
+        <option value="weekly2">2 times per week</option>
+        <option value="weekly1">Once per week</option>
+        <option value="monthly">Once per month</option>
+      </select>
       <button id="add-btn">Add</button>
     </div>
 

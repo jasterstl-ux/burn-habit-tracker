@@ -1,6 +1,16 @@
 const habits = JSON.parse(localStorage.getItem("habits")) || [];
 const today = new Date().toDateString();
 
+// Schedule definitions
+const schedules = {
+  daily: { name: "Daily", checksPerPeriod: 1, periodDays: 1 },
+  every2days: { name: "Every 2 days", checksPerPeriod: 1, periodDays: 2 },
+  weekly3: { name: "3x/week", checksPerPeriod: 3, periodDays: 7 },
+  weekly2: { name: "2x/week", checksPerPeriod: 2, periodDays: 7 },
+  weekly1: { name: "Weekly", checksPerPeriod: 1, periodDays: 7 },
+  monthly: { name: "Monthly", checksPerPeriod: 1, periodDays: 30 },
+};
+
 function lightenColor(hex) {
   let r = parseInt(hex.slice(1, 3), 16);
   let g = parseInt(hex.slice(3, 5), 16);
@@ -123,6 +133,53 @@ function getBadge(streak) {
   return "";
 }
 
+// STRENGTH & SCHEDULE LOGIC
+function getCurrentPeriodStart(habit) {
+  const sched = schedules[habit.schedule || "daily"];
+  const start = new Date();
+  const daysSinceEpoch = Math.floor(start.getTime() / 86400000);
+  const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % sched.periodDays);
+  const periodStart = new Date(periodStartEpoch * 86400000);
+  return periodStart.toDateString();
+}
+
+function updateProgress(habit) {
+  if (!habit.schedule) habit.schedule = "daily";
+  if (!habit.checksThisPeriod) habit.checksThisPeriod = 0;
+  if (!habit.currentPeriodStart)
+    habit.currentPeriodStart = getCurrentPeriodStart(habit);
+
+  const currentPeriod = getCurrentPeriodStart(habit);
+  if (habit.currentPeriodStart !== currentPeriod) {
+    habit.checksThisPeriod = 0;
+    habit.currentPeriodStart = currentPeriod;
+  }
+
+  if (habit.doneToday) {
+    const sched = schedules[habit.schedule];
+    if (habit.checksThisPeriod < sched.checksPerPeriod) {
+      habit.checksThisPeriod += 1;
+    }
+  }
+
+  // Strength (forgiving)
+  if (!habit.strength) habit.strength = 0;
+  if (habit.doneToday) {
+    habit.strength = Math.min(
+      100,
+      habit.strength + (100 - habit.strength) * 0.1
+    );
+  } else if (
+    habit.lastDoneDate &&
+    new Date(habit.lastDoneDate).toDateString() !== today
+  ) {
+    habit.strength = Math.max(0, habit.strength * 0.99);
+  }
+
+  // Classic streak
+  updateStreak(habit);
+}
+
 function updateStreak(habit) {
   if (!habit.lastDoneDate) return;
   const last = new Date(habit.lastDoneDate);
@@ -148,11 +205,17 @@ function renderStats() {
   const onFire = habits.filter((h) => h.streak > 0).length;
   const best = Math.max(0, ...habits.map((h) => h.streak));
   const todayDone = habits.filter((h) => h.doneToday).length;
+  const avgStrength = habits.length
+    ? Math.round(
+        habits.reduce((sum, h) => sum + (h.strength || 0), 0) / habits.length
+      )
+    : 0;
 
   document.getElementById("stats-grid").innerHTML = `
     <div class="stat-card"><div class="stat-value">${habits.length}</div><div class="stat-label">Total Habits</div></div>
     <div class="stat-card"><div class="stat-value">${onFire}</div><div class="stat-label">On Fire</div></div>
     <div class="stat-card"><div class="stat-value">${best}</div><div class="stat-label">Best Streak</div></div>
+    <div class="stat-card"><div class="stat-value">${avgStrength}%</div><div class="stat-label">Avg Strength</div></div>
     <div class="stat-card"><div class="stat-value">${todayDone}</div><div class="stat-label">Done Today</div></div>
   `;
 
@@ -176,12 +239,23 @@ function renderHabits() {
 
   habits.forEach((habit, index) => {
     if (habit.lastDoneDate !== today) habit.doneToday = false;
-    updateStreak(habit);
+    updateProgress(habit);
 
     const li = document.createElement("li");
     li.className = `habit-item ${habit.doneToday ? "completed" : ""}`;
     li.draggable = true;
-    const progress = Math.min((habit.streak / 7) * 100, 100);
+    const streakProgress = Math.min((habit.streak / 7) * 100, 100);
+    const strengthProgress = habit.strength || 0;
+    const sched = schedules[habit.schedule || "daily"];
+    const scheduleText = `${habit.checksThisPeriod || 0}/${
+      sched.checksPerPeriod
+    } this ${
+      sched.periodDays === 1
+        ? "day"
+        : sched.periodDays === 7
+        ? "week"
+        : "period"
+    }`;
 
     const habitColor = habit.color || "#4c4cff";
     const gradient = `linear-gradient(90deg, ${habitColor}, ${lightenColor(
@@ -208,7 +282,18 @@ function renderHabits() {
           <span class="streak-value">${habit.streak}</span>
         </div>
         <div class="streak-bar-container">
-          <div class="streak-bar" style="width: ${progress}%"></div>
+          <div class="streak-bar" style="width: ${streakProgress}%"></div>
+        </div>
+        <div class="strength-group">
+          <span>💪</span>
+          <span class="strength-value">${Math.round(strengthProgress)}%</span>
+        </div>
+        <div class="strength-bar-container">
+          <div class="strength-bar" style="width: ${strengthProgress}%"></div>
+        </div>
+        <div class="schedule-group">
+          <span>📅</span>
+          <span>${scheduleText}</span>
         </div>
         <span class="badge">${getBadge(habit.streak)}</span>
       </div>
@@ -282,13 +367,15 @@ function renderHabits() {
   });
 }
 
-// Add Habit with Grids
+// Add Habit with Schedule
 let selectedEmoji = "🔥";
 let selectedColor = "#4c4cff";
+let selectedSchedule = "daily";
 
 document.addEventListener("DOMContentLoaded", () => {
   const emojiGrid = document.getElementById("emoji-grid");
   const colorGrid = document.getElementById("color-grid");
+  const scheduleSelect = document.getElementById("habit-schedule");
 
   const emojis = [
     "🔥",
@@ -382,9 +469,12 @@ document.addEventListener("DOMContentLoaded", () => {
     colorGrid.appendChild(btn);
   });
 
-  // Default selected
   emojiGrid.firstChild.classList.add("selected");
   colorGrid.firstChild.classList.add("selected");
+
+  scheduleSelect.addEventListener("change", () => {
+    selectedSchedule = scheduleSelect.value;
+  });
 
   const addBtn = document.getElementById("add-btn");
   const habitInput = document.getElementById("habit-input");
@@ -396,7 +486,11 @@ document.addEventListener("DOMContentLoaded", () => {
       name,
       icon: selectedEmoji,
       color: selectedColor,
+      schedule: selectedSchedule,
       streak: 0,
+      strength: 0,
+      checksThisPeriod: 0,
+      currentPeriodStart: getCurrentPeriodStart({ schedule: selectedSchedule }),
       doneToday: false,
       lastDoneDate: null,
     });
