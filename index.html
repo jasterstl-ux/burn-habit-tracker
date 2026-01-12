@@ -109,7 +109,7 @@
     <!-- FAB -->
     <button id="add-fab">+</button>
 
-    <!-- Add Input with Schedule Picker -->
+    <!-- Add Input with Schedule Picker + Reminder Time -->
     <div class="add-input" id="add-input">
       <input id="habit-input" type="text" placeholder="New habit..." />
       <div class="picker-label">Pick an emoji:</div>
@@ -125,6 +125,8 @@
         <option value="weekly1">Once per week</option>
         <option value="monthly">Once per month</option>
       </select>
+      <div class="picker-label">Reminder time (optional):</div>
+      <input type="time" id="habit-reminder-time" />
       <button id="add-btn">Add</button>
     </div>
 
@@ -157,7 +159,7 @@
           await Notification.requestPermission();
         if (Notification.permission === "granted" && navigator.serviceWorker) {
           const reg = await navigator.serviceWorker.ready;
-          reg.active?.postMessage("start-reminders");
+          reg.active?.postMessage({ type: "start-reminders" });
         }
       }
       document.addEventListener("DOMContentLoaded", enableReminders);

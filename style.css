@@ -542,3 +542,18 @@ body.dark .day-0 {
     width: 260px;
   }
 }
+
+/* Reminder Time Input */
+.add-input input[type="time"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+body.dark .add-input input[type="time"] {
+  background: #333;
+  color: white;
+  border-color: #555;
+}

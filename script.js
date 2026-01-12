@@ -133,7 +133,6 @@ function getBadge(streak) {
   return "";
 }
 
-// STRENGTH & SCHEDULE LOGIC
 function getCurrentPeriodStart(habit) {
   const sched = schedules[habit.schedule || "daily"];
   const start = new Date();
@@ -295,30 +294,28 @@ function renderHabits() {
           <span>📅</span>
           <span>${scheduleText}</span>
         </div>
-        <span class="badge">${getBadge(habit.streak)}</span>
       </div>
+      <span class="badge">${getBadge(habit.streak)}</span>
     `;
 
     li.querySelector(".habit-check").addEventListener("change", (e) => {
-      const prev = habit.streak;
       habit.doneToday = e.target.checked;
-      habit.lastDoneDate = today;
-      if (e.target.checked) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (
-          !habit.lastDoneDate ||
-          new Date(habit.lastDoneDate).toDateString() ===
-            yesterday.toDateString() ||
-          prev === 0
-        ) {
-          habit.streak += 1;
-        }
-        if (habit.streak > prev) celebrate(habit.streak);
+      if (habit.doneToday) {
+        habit.lastDoneDate = today;
+        habit.streak = (habit.streak || 0) + 1;
+        celebrate(habit.streak);
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } else {
+        habit.streak = Math.max(0, (habit.streak || 0) - 1);
       }
+      updateProgress(habit);
       saveHabits();
       renderHabits();
-      if (document.querySelector('[data-tab="stats"].active')) renderStats();
+      renderStats();
     });
 
     li.querySelector(".delete-btn").addEventListener("click", () => {
@@ -328,42 +325,7 @@ function renderHabits() {
       renderStats();
     });
 
-    li.addEventListener("dragstart", () => li.classList.add("dragging"));
-    li.addEventListener("dragend", () => {
-      li.classList.remove("dragging");
-      saveHabits();
-    });
-
     list.appendChild(li);
-  });
-
-  list.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    const dragging = document.querySelector(".dragging");
-    const after = [
-      ...list.querySelectorAll(".habit-item:not(.dragging)"),
-    ].reduce(
-      (closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = e.clientY - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset)
-          return { offset, element: child };
-        return closest;
-      },
-      { offset: Number.NEGATIVE_INFINITY }
-    ).element;
-    if (after == null) list.appendChild(dragging);
-    else list.insertBefore(dragging, after);
-  });
-
-  list.addEventListener("drop", () => {
-    const newOrder = Array.from(list.children).map((li) => {
-      const name = li.querySelector(".habit-name").textContent;
-      return habits.find((h) => h.name === name);
-    });
-    habits.length = 0;
-    habits.push(...newOrder);
-    saveHabits();
   });
 }
 
@@ -419,19 +381,19 @@ document.addEventListener("DOMContentLoaded", () => {
     "🙏",
     "😊",
   ];
-
   emojis.forEach((emoji) => {
     const btn = document.createElement("button");
     btn.textContent = emoji;
     btn.addEventListener("click", () => {
       selectedEmoji = emoji;
-      document
-        .querySelectorAll("#emoji-grid button")
+      emojiGrid
+        .querySelectorAll("button")
         .forEach((b) => b.classList.remove("selected"));
       btn.classList.add("selected");
     });
     emojiGrid.appendChild(btn);
   });
+  emojiGrid.firstChild.classList.add("selected");
 
   const colors = [
     "#4c4cff",
@@ -455,26 +417,24 @@ document.addEventListener("DOMContentLoaded", () => {
     "#ffeb3b",
     "#2196f3",
   ];
-
   colors.forEach((color) => {
     const btn = document.createElement("button");
     btn.style.background = color;
     btn.addEventListener("click", () => {
       selectedColor = color;
-      document
-        .querySelectorAll("#color-grid button")
+      colorGrid
+        .querySelectorAll("button")
         .forEach((b) => b.classList.remove("selected"));
       btn.classList.add("selected");
     });
     colorGrid.appendChild(btn);
   });
-
-  emojiGrid.firstChild.classList.add("selected");
   colorGrid.firstChild.classList.add("selected");
 
-  scheduleSelect.addEventListener("change", () => {
-    selectedSchedule = scheduleSelect.value;
-  });
+  scheduleSelect.addEventListener(
+    "change",
+    () => (selectedSchedule = scheduleSelect.value)
+  );
 
   const addBtn = document.getElementById("add-btn");
   const habitInput = document.getElementById("habit-input");
@@ -482,11 +442,14 @@ document.addEventListener("DOMContentLoaded", () => {
   addBtn.addEventListener("click", () => {
     const name = habitInput.value.trim();
     if (!name) return;
+    const reminderTime =
+      document.getElementById("habit-reminder-time")?.value || null;
     habits.push({
       name,
       icon: selectedEmoji,
       color: selectedColor,
       schedule: selectedSchedule,
+      reminderTime, // New: saved per habit
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
@@ -499,6 +462,10 @@ document.addEventListener("DOMContentLoaded", () => {
     saveHabits();
     renderHabits();
     renderStats();
+    // Send updated habits to SW for reminders
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.active.postMessage({ type: "habits-for-reminders", habits })
+    );
   });
 
   habitInput.addEventListener("keypress", (e) => {
@@ -564,3 +531,11 @@ document.getElementById("import-file").addEventListener("change", (e) => {
 // Initial render
 renderHabits();
 renderStats();
+
+// SW message listener (for quick.html sync if needed)
+navigator.serviceWorker.addEventListener("message", (event) => {
+  if (event.data.type === "habit-checked") {
+    renderHabits();
+    renderStats();
+  }
+});
