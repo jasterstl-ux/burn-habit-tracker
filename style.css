@@ -557,3 +557,38 @@ body.dark .add-input input[type="time"] {
   color: white;
   border-color: #555;
 }
+
+.add-input {
+  position: fixed;
+  bottom: 100px; /* Pull it up a bit more from the very bottom so more fits on screen */
+  right: 20px;
+  width: 360px; /* Slightly wider = less cramped vertically */
+  max-height: 80vh; /* Limit to 80% of viewport height → forces scroll when tall */
+  overflow-y: auto; /* Add scrollbar when content overflows (this is the key fix) */
+  background: white;
+  padding: 20px;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  display: none;
+  z-index: 950;
+  transition: all 0.3s ease;
+}
+
+.add-input.show {
+  display: block;
+}
+
+/* Optional: Make it look nicer on small screens */
+@media (max-height: 700px) {
+  /* For shorter phones/laptops */
+  .add-input {
+    bottom: 80px;
+    width: 90%;
+    right: 5%;
+    max-height: 75vh;
+  }
+}
+
+body.dark .add-input {
+  background: #1e1e1e;
+}
