@@ -338,7 +338,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const emojiGrid = document.getElementById("emoji-grid");
   const colorGrid = document.getElementById("color-grid");
   const scheduleSelect = document.getElementById("habit-schedule");
+  const addPopup = document.getElementById("add-input");
+  const addFab = document.getElementById("add-fab");
+  const addBtn = document.getElementById("add-btn");
+  const habitInput = document.getElementById("habit-input");
+  const closeBtn = document.getElementById("close-add");
 
+  // Emoji picker
   const emojis = [
     "🔥",
     "💪",
@@ -393,8 +399,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     emojiGrid.appendChild(btn);
   });
-  emojiGrid.firstChild.classList.add("selected");
+  emojiGrid.firstChild?.classList.add("selected");
 
+  // Color picker
   const colors = [
     "#4c4cff",
     "#ff6b35",
@@ -429,16 +436,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     colorGrid.appendChild(btn);
   });
-  colorGrid.firstChild.classList.add("selected");
+  colorGrid.firstChild?.classList.add("selected");
 
+  // Schedule
   scheduleSelect.addEventListener(
     "change",
     () => (selectedSchedule = scheduleSelect.value)
   );
 
-  const addBtn = document.getElementById("add-btn");
-  const habitInput = document.getElementById("habit-input");
-
+  // Add button handler
   addBtn.addEventListener("click", () => {
     const name = habitInput.value.trim();
     if (!name) return;
@@ -449,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
       icon: selectedEmoji,
       color: selectedColor,
       schedule: selectedSchedule,
-      reminderTime, // New: saved per habit
+      reminderTime,
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
@@ -458,11 +464,10 @@ document.addEventListener("DOMContentLoaded", () => {
       lastDoneDate: null,
     });
     habitInput.value = "";
-    document.getElementById("add-input").classList.remove("show");
+    addPopup.classList.remove("show");
     saveHabits();
     renderHabits();
     renderStats();
-    // Send updated habits to SW for reminders
     navigator.serviceWorker.ready.then((reg) =>
       reg.active.postMessage({ type: "habits-for-reminders", habits })
     );
@@ -470,6 +475,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   habitInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") addBtn.click();
+  });
+
+  // === NEW: Close popup methods ===
+  function closeAddPopup() {
+    addPopup.classList.remove("show");
+  }
+
+  // Click X button
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeAddPopup);
+  }
+
+  // Click outside popup
+  document.addEventListener("click", (e) => {
+    if (
+      addPopup.classList.contains("show") &&
+      !addPopup.contains(e.target) &&
+      !addFab.contains(e.target)
+    ) {
+      closeAddPopup();
+    }
   });
 });
 
