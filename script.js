@@ -485,6 +485,30 @@ document.addEventListener("DOMContentLoaded", () => {
   habitInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") addBtn.click();
   });
+  // Close add popup: outside click or X button
+  const addPopup = document.getElementById("add-input");
+  const addFab = document.getElementById("add-fab");
+  const closeBtn = document.getElementById("close-add");
+
+  function closeAddPopup() {
+    addPopup.classList.remove("show");
+  }
+
+  // Click X button
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeAddPopup);
+  }
+
+  // Click outside popup (but not on FAB)
+  document.addEventListener("click", (e) => {
+    if (
+      addPopup.classList.contains("show") &&
+      !addPopup.contains(e.target) &&
+      !addFab.contains(e.target)
+    ) {
+      closeAddPopup();
+    }
+  });
 });
 
 // PWA Install

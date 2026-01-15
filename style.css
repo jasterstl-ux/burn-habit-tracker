@@ -616,3 +616,48 @@ body.dark .close-add-btn {
 body.dark .close-add-btn:hover {
   color: #ff6b35;
 }
+
+/* ────────────────────────────────────────────────────────────── */
+/* DARK MODE COLOR PICKER – LESS BRIGHT, COLOR STILL VISIBLE      */
+/* ────────────────────────────────────────────────────────────── */
+
+body.dark .color-grid button {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5); /* Deeper shadow for contrast */
+  border: 1px solid #444; /* Subtle border so swatches don't blend into grid */
+}
+
+body.dark .color-grid button:hover {
+  transform: scale(1.2);
+  background: #555 !important; /* Muted gray hover – not bright */
+  box-shadow: 0 0 0 3px #777, 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+body.dark .color-grid button.selected {
+  transform: scale(1.2);
+  background: #666 !important; /* Slightly darker muted gray – keeps the actual color prominent */
+  box-shadow: 0 0 0 4px #999, 0 0 12px rgba(255, 255, 255, 0.25); /* Strong outline glow without blinding */
+  border: 2px solid #bbb; /* Clean border to make selection pop without washing out the color */
+}
+.close-add-btn {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: none;
+  border: none;
+  font-size: 32px;
+  font-weight: bold;
+  color: #888;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.2s;
+}
+.close-add-btn:hover {
+  color: #ff6b35;
+}
+body.dark .close-add-btn {
+  color: #aaa;
+}
+body.dark .close-add-btn:hover {
+  color: #ff6b35;
+}
