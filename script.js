@@ -161,18 +161,31 @@ function updateProgress(habit) {
     }
   }
 
-  // Strength (forgiving)
+  // Strength (forgiving but punishes uncheck on same day)
   if (!habit.strength) habit.strength = 0;
+
   if (habit.doneToday) {
-    habit.strength = Math.min(
-      100,
-      habit.strength + (100 - habit.strength) * 0.1
-    );
-  } else if (
-    habit.lastDoneDate &&
-    new Date(habit.lastDoneDate).toDateString() !== today
-  ) {
-    habit.strength = Math.max(0, habit.strength * 0.99);
+    // Only increase once per day
+    if (!habit.strengthIncreasedToday) {
+      habit.strength = Math.min(
+        100,
+        habit.strength + (100 - habit.strength) * 0.1
+      );
+      habit.strengthIncreasedToday = true;
+    }
+  } else {
+    // Decay if unchecked today (after having been checked earlier)
+    if (habit.lastDoneDate === today && habit.strengthIncreasedToday) {
+      // Punish the uncheck: small immediate drop
+      habit.strength = Math.max(0, habit.strength * 0.95); // 5% drop on uncheck
+      habit.strengthIncreasedToday = false; // Reset so no double penalty
+    } else if (
+      habit.lastDoneDate &&
+      new Date(habit.lastDoneDate).toDateString() !== today
+    ) {
+      // Normal daily decay if missed completely
+      habit.strength = Math.max(0, habit.strength * 0.99);
+    }
   }
 
   // Classic streak
@@ -338,13 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const emojiGrid = document.getElementById("emoji-grid");
   const colorGrid = document.getElementById("color-grid");
   const scheduleSelect = document.getElementById("habit-schedule");
-  const addPopup = document.getElementById("add-input");
-  const addFab = document.getElementById("add-fab");
-  const addBtn = document.getElementById("add-btn");
-  const habitInput = document.getElementById("habit-input");
-  const closeBtn = document.getElementById("close-add");
 
-  // Emoji picker
   const emojis = [
     "🔥",
     "💪",
@@ -399,9 +406,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     emojiGrid.appendChild(btn);
   });
-  emojiGrid.firstChild?.classList.add("selected");
+  emojiGrid.firstChild.classList.add("selected");
 
-  // Color picker
   const colors = [
     "#4c4cff",
     "#ff6b35",
@@ -436,15 +442,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     colorGrid.appendChild(btn);
   });
-  colorGrid.firstChild?.classList.add("selected");
+  colorGrid.firstChild.classList.add("selected");
 
-  // Schedule
   scheduleSelect.addEventListener(
     "change",
     () => (selectedSchedule = scheduleSelect.value)
   );
 
-  // Add button handler
+  const addBtn = document.getElementById("add-btn");
+  const habitInput = document.getElementById("habit-input");
+
   addBtn.addEventListener("click", () => {
     const name = habitInput.value.trim();
     if (!name) return;
@@ -455,19 +462,21 @@ document.addEventListener("DOMContentLoaded", () => {
       icon: selectedEmoji,
       color: selectedColor,
       schedule: selectedSchedule,
-      reminderTime,
+      reminderTime, // New: saved per habit
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
       currentPeriodStart: getCurrentPeriodStart({ schedule: selectedSchedule }),
       doneToday: false,
       lastDoneDate: null,
+      strengthIncreasedToday: false, // NEW: Flag for daily strength cap
     });
     habitInput.value = "";
-    addPopup.classList.remove("show");
+    document.getElementById("add-input").classList.remove("show");
     saveHabits();
     renderHabits();
     renderStats();
+    // Send updated habits to SW for reminders
     navigator.serviceWorker.ready.then((reg) =>
       reg.active.postMessage({ type: "habits-for-reminders", habits })
     );
@@ -475,27 +484,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   habitInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") addBtn.click();
-  });
-
-  // === NEW: Close popup methods ===
-  function closeAddPopup() {
-    addPopup.classList.remove("show");
-  }
-
-  // Click X button
-  if (closeBtn) {
-    closeBtn.addEventListener("click", closeAddPopup);
-  }
-
-  // Click outside popup
-  document.addEventListener("click", (e) => {
-    if (
-      addPopup.classList.contains("show") &&
-      !addPopup.contains(e.target) &&
-      !addFab.contains(e.target)
-    ) {
-      closeAddPopup();
-    }
   });
 });
 
