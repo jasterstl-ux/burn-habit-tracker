@@ -1,15 +1,11 @@
 const habits = JSON.parse(localStorage.getItem("habits")) || [];
 const today = new Date().toDateString();
 
-// Schedule definitions
-const schedules = {
-  daily: { name: "Daily", checksPerPeriod: 1, periodDays: 1 },
-  every2days: { name: "Every 2 days", checksPerPeriod: 1, periodDays: 2 },
-  weekly3: { name: "3x/week", checksPerPeriod: 3, periodDays: 7 },
-  weekly2: { name: "2x/week", checksPerPeriod: 2, periodDays: 7 },
-  weekly1: { name: "Weekly", checksPerPeriod: 1, periodDays: 7 },
-  monthly: { name: "Monthly", checksPerPeriod: 1, periodDays: 30 },
-};
+habits.forEach((habit) => {
+  // Ensure defaults
+  habit.checksPerPeriod = habit.checksPerPeriod || 1;
+  habit.periodDays = habit.periodDays || 1;
+});
 
 function lightenColor(hex) {
   let r = parseInt(hex.slice(1, 3), 16);
@@ -19,6 +15,14 @@ function lightenColor(hex) {
     255,
     b + 80
   )})`;
+}
+
+function getScheduleName(checksPerPeriod, periodDays) {
+  if (periodDays === 1)
+    return checksPerPeriod === 1 ? "Daily" : `${checksPerPeriod}x/day`; // Rare, but handles multiples per day
+  if (periodDays === 7) return `${checksPerPeriod}x/week`;
+  if (periodDays === 30) return `${checksPerPeriod}x/month`;
+  return `${checksPerPeriod}x every ${periodDays} days`;
 }
 
 // Theme Toggle
@@ -134,16 +138,17 @@ function getBadge(streak) {
 }
 
 function getCurrentPeriodStart(habit) {
-  const sched = schedules[habit.schedule || "daily"];
+  const periodDays = habit.periodDays || 1;
   const start = new Date();
   const daysSinceEpoch = Math.floor(start.getTime() / 86400000);
-  const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % sched.periodDays);
+  const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % periodDays);
   const periodStart = new Date(periodStartEpoch * 86400000);
   return periodStart.toDateString();
 }
 
 function updateProgress(habit) {
-  if (!habit.schedule) habit.schedule = "daily";
+  if (!habit.checksPerPeriod) habit.checksPerPeriod = 1;
+  if (!habit.periodDays) habit.periodDays = 1;
   if (!habit.checksThisPeriod) habit.checksThisPeriod = 0;
   if (!habit.currentPeriodStart)
     habit.currentPeriodStart = getCurrentPeriodStart(habit);
@@ -152,13 +157,6 @@ function updateProgress(habit) {
   if (habit.currentPeriodStart !== currentPeriod) {
     habit.checksThisPeriod = 0;
     habit.currentPeriodStart = currentPeriod;
-  }
-
-  if (habit.doneToday) {
-    const sched = schedules[habit.schedule];
-    if (habit.checksThisPeriod < sched.checksPerPeriod) {
-      habit.checksThisPeriod += 1;
-    }
   }
 
   // Strength (forgiving but punishes uncheck on same day)
@@ -258,16 +256,6 @@ function renderHabits() {
     li.draggable = true;
     const streakProgress = Math.min((habit.streak / 7) * 100, 100);
     const strengthProgress = habit.strength || 0;
-    const sched = schedules[habit.schedule || "daily"];
-    const scheduleText = `${habit.checksThisPeriod || 0}/${
-      sched.checksPerPeriod
-    } this ${
-      sched.periodDays === 1
-        ? "day"
-        : sched.periodDays === 7
-        ? "week"
-        : "period"
-    }`;
 
     const habitColor = habit.color || "#4c4cff";
     const gradient = `linear-gradient(90deg, ${habitColor}, ${lightenColor(
@@ -304,10 +292,13 @@ function renderHabits() {
           <div class="strength-bar" style="width: ${strengthProgress}%"></div>
         </div>
         <div class="schedule-group">
-          <span>📅</span>
-          <span>${scheduleText}</span>
+         <span>📅</span>
+         <span>${getScheduleName(
+           habit.checksPerPeriod,
+           habit.periodDays
+         )}</span>
+          <span>(${habit.checksThisPeriod || 0}/${habit.checksPerPeriod})</span>
         </div>
-      </div>
       <span class="badge">${getBadge(habit.streak)}</span>
     `;
 
@@ -345,12 +336,10 @@ function renderHabits() {
 // Add Habit with Schedule
 let selectedEmoji = "🔥";
 let selectedColor = "#4c4cff";
-let selectedSchedule = "daily";
 
 document.addEventListener("DOMContentLoaded", () => {
   const emojiGrid = document.getElementById("emoji-grid");
   const colorGrid = document.getElementById("color-grid");
-  const scheduleSelect = document.getElementById("habit-schedule");
 
   const emojis = [
     "🔥",
@@ -444,29 +433,29 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   colorGrid.firstChild.classList.add("selected");
 
-  scheduleSelect.addEventListener(
-    "change",
-    () => (selectedSchedule = scheduleSelect.value)
-  );
-
   const addBtn = document.getElementById("add-btn");
   const habitInput = document.getElementById("habit-input");
+  const checksPerPeriodInput = document.getElementById("checks-per-period");
+  const periodDaysInput = document.getElementById("period-days");
 
   addBtn.addEventListener("click", () => {
     const name = habitInput.value.trim();
     if (!name) return;
     const reminderTime =
       document.getElementById("habit-reminder-time")?.value || null;
+    const checksPerPeriod = parseInt(checksPerPeriodInput.value, 10) || 1;
+    const periodDays = parseInt(periodDaysInput.value, 10) || 1;
     habits.push({
       name,
       icon: selectedEmoji,
       color: selectedColor,
-      schedule: selectedSchedule,
+      checksPerPeriod,
+      periodDays,
       reminderTime, // New: saved per habit
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
-      currentPeriodStart: getCurrentPeriodStart({ schedule: selectedSchedule }),
+      currentPeriodStart: getCurrentPeriodStart({ periodDays }),
       doneToday: false,
       lastDoneDate: null,
       strengthIncreasedToday: false, // NEW: Flag for daily strength cap
