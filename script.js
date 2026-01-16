@@ -159,31 +159,10 @@ function updateProgress(habit) {
     habit.currentPeriodStart = currentPeriod;
   }
 
-  // Strength (forgiving but punishes uncheck on same day)
-  if (!habit.strength) habit.strength = 0;
-
-  if (habit.doneToday) {
-    // Only increase once per day
-    if (!habit.strengthIncreasedToday) {
-      habit.strength = Math.min(
-        100,
-        habit.strength + (100 - habit.strength) * 0.1
-      );
-      habit.strengthIncreasedToday = true;
-    }
-  } else {
-    // Decay if unchecked today (after having been checked earlier)
-    if (habit.lastDoneDate === today && habit.strengthIncreasedToday) {
-      // Punish the uncheck: small immediate drop
-      habit.strength = Math.max(0, habit.strength * 0.95); // 5% drop on uncheck
-      habit.strengthIncreasedToday = false; // Reset so no double penalty
-    } else if (
-      habit.lastDoneDate &&
-      new Date(habit.lastDoneDate).toDateString() !== today
-    ) {
-      // Normal daily decay if missed completely
-      habit.strength = Math.max(0, habit.strength * 0.99);
-    }
+  // Reset strength tracking flags on new day
+  if (habit.lastDoneDate !== today) {
+    habit.strengthIncreasedToday = false;
+    habit.strengthBeforeToday = undefined;
   }
 
   // Classic streak
@@ -304,9 +283,23 @@ function renderHabits() {
 
     li.querySelector(".habit-check").addEventListener("change", (e) => {
       habit.doneToday = e.target.checked;
+      if (!habit.strength) habit.strength = 0;
+
       if (habit.doneToday) {
         habit.lastDoneDate = today;
         habit.streak = (habit.streak || 0) + 1;
+        // Increase strength once per day
+        if (!habit.strengthIncreasedToday) {
+          // Store strength before increment so we can restore it on uncheck
+          if (!habit.strengthBeforeToday) {
+            habit.strengthBeforeToday = habit.strength;
+          }
+          habit.strength = Math.min(
+            100,
+            habit.strength + (100 - habit.strength) * 0.1
+          );
+          habit.strengthIncreasedToday = true;
+        }
         celebrate(habit.streak);
         confetti({
           particleCount: 150,
@@ -315,6 +308,11 @@ function renderHabits() {
         });
       } else {
         habit.streak = Math.max(0, (habit.streak || 0) - 1);
+        // Decay strength when unchecking - restore to pre-increment value
+        if (habit.strengthIncreasedToday) {
+          habit.strength = habit.strengthBeforeToday || 0;
+          habit.strengthIncreasedToday = false;
+        }
       }
       updateProgress(habit);
       saveHabits();
