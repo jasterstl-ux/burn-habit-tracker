@@ -627,16 +627,14 @@ body.dark .color-grid button {
 }
 
 body.dark .color-grid button:hover {
-  transform: scale(1.2);
-  background: #555 !important; /* Muted gray hover – not bright */
-  box-shadow: 0 0 0 3px #777, 0 0 12px rgba(255, 255, 255, 0.2);
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px #777, 0 0 12px rgba(255, 255, 255, 0.3);
 }
 
 body.dark .color-grid button.selected {
-  transform: scale(1.2);
-  background: #666 !important; /* Slightly darker muted gray – keeps the actual color prominent */
-  box-shadow: 0 0 0 4px #999, 0 0 12px rgba(255, 255, 255, 0.25); /* Strong outline glow without blinding */
-  border: 2px solid #bbb; /* Clean border to make selection pop without washing out the color */
+  transform: scale(1.1);
+  box-shadow: 0 0 0 4px #999, 0 0 12px rgba(255, 255, 255, 0.4);
+  border: 2px solid #bbb;
 }
 .close-add-btn {
   position: absolute;
