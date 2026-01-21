@@ -17,7 +17,7 @@ function lightenColor(hex) {
   let b = parseInt(hex.slice(5, 7), 16);
   return `rgb(${Math.min(255, r + 80)}, ${Math.min(255, g + 80)}, ${Math.min(
     255,
-    b + 80
+    b + 80,
   )})`;
 }
 
@@ -135,16 +135,16 @@ function getBadge(streak) {
 
 // STRENGTH & SCHEDULE LOGIC
 function getCurrentPeriodStart(habit) {
-  const sched = schedules[habit.schedule || "daily"];
+  const periodDays = 7; // Always weekly
   const start = new Date();
   const daysSinceEpoch = Math.floor(start.getTime() / 86400000);
-  const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % sched.periodDays);
+  const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % periodDays);
   const periodStart = new Date(periodStartEpoch * 86400000);
   return periodStart.toDateString();
 }
 
 function updateProgress(habit) {
-  if (!habit.schedule) habit.schedule = "daily";
+  if (!habit.timesPerWeek) habit.timesPerWeek = 1;
   if (!habit.checksThisPeriod) habit.checksThisPeriod = 0;
   if (!habit.currentPeriodStart)
     habit.currentPeriodStart = getCurrentPeriodStart(habit);
@@ -153,12 +153,20 @@ function updateProgress(habit) {
   if (habit.currentPeriodStart !== currentPeriod) {
     habit.checksThisPeriod = 0;
     habit.currentPeriodStart = currentPeriod;
+    habit.completedToday = false;
   }
 
-  if (habit.doneToday) {
-    const sched = schedules[habit.schedule];
-    if (habit.checksThisPeriod < sched.checksPerPeriod) {
+  // Track if we've already counted today's completion
+  if (!habit.completedToday && habit.doneToday) {
+    if (habit.checksThisPeriod < habit.timesPerWeek) {
       habit.checksThisPeriod += 1;
+      habit.completedToday = true;
+    }
+  } else if (habit.completedToday && !habit.doneToday) {
+    // User unchecked the habit, decrement counter
+    if (habit.checksThisPeriod > 0) {
+      habit.checksThisPeriod -= 1;
+      habit.completedToday = false;
     }
   }
 
@@ -167,7 +175,7 @@ function updateProgress(habit) {
   if (habit.doneToday) {
     habit.strength = Math.min(
       100,
-      habit.strength + (100 - habit.strength) * 0.1
+      habit.strength + (100 - habit.strength) * 0.1,
     );
   } else if (
     habit.lastDoneDate &&
@@ -207,7 +215,7 @@ function renderStats() {
   const todayDone = habits.filter((h) => h.doneToday).length;
   const avgStrength = habits.length
     ? Math.round(
-        habits.reduce((sum, h) => sum + (h.strength || 0), 0) / habits.length
+        habits.reduce((sum, h) => sum + (h.strength || 0), 0) / habits.length,
       )
     : 0;
 
@@ -246,23 +254,23 @@ function renderHabits() {
     li.draggable = true;
     const streakProgress = Math.min((habit.streak / 7) * 100, 100);
     const strengthProgress = habit.strength || 0;
-    const sched = schedules[habit.schedule || "daily"];
-    const scheduleText = `${habit.checksThisPeriod || 0}/${
-      sched.checksPerPeriod
-    } this ${
-      sched.periodDays === 1
-        ? "day"
-        : sched.periodDays === 7
-        ? "week"
-        : "period"
-    }`;
 
     const habitColor = habit.color || "#4c4cff";
     const gradient = `linear-gradient(90deg, ${habitColor}, ${lightenColor(
-      habitColor
+      habitColor,
     )})`;
     li.style.setProperty("--habit-color", habitColor);
     li.style.setProperty("--habit-color-gradient", gradient);
+
+    // Build schedule text with times per week and time of day
+    const timesPerWeek = habit.timesPerWeek || 1;
+    const timeOfDay = habit.timeOfDay ? ` @ ${habit.timeOfDay}` : "";
+    const scheduleText = `${habit.checksThisPeriod || 0}/${timesPerWeek} this week${timeOfDay}`;
+
+    // Calculate completion percentage based on checks this period
+    const completionPercentage = Math.round(
+      (habit.checksThisPeriod / timesPerWeek) * 100,
+    );
 
     li.innerHTML = `
       <div class="habit-main">
@@ -271,8 +279,8 @@ function renderHabits() {
         }>
         <span class="habit-icon">${habit.icon || "🔥"}</span>
         <span class="habit-name ${habit.doneToday ? "done" : ""}">${
-      habit.name
-    }</span>
+          habit.name
+        }</span>
         <button class="delete-btn" title="Delete">×</button>
       </div>
       <div class="habit-footer">
@@ -285,11 +293,11 @@ function renderHabits() {
           <div class="streak-bar" style="width: ${streakProgress}%"></div>
         </div>
         <div class="strength-group">
-          <span>💪</span>
-          <span class="strength-value">${Math.round(strengthProgress)}%</span>
+          <span>📊</span>
+          <span class="strength-value" title="This week's completion">${Math.min(completionPercentage, 100)}%</span>
         </div>
         <div class="strength-bar-container">
-          <div class="strength-bar" style="width: ${strengthProgress}%"></div>
+          <div class="strength-bar" style="width: ${Math.min(completionPercentage, 100)}%"></div>
         </div>
         <div class="schedule-group">
           <span>📅</span>
@@ -318,6 +326,8 @@ function renderHabits() {
       }
       saveHabits();
       renderHabits();
+      checkAchievements();
+      renderAchievements();
       if (document.querySelector('[data-tab="stats"].active')) renderStats();
     });
 
@@ -350,7 +360,7 @@ function renderHabits() {
           return { offset, element: child };
         return closest;
       },
-      { offset: Number.NEGATIVE_INFINITY }
+      { offset: Number.NEGATIVE_INFINITY },
     ).element;
     if (after == null) list.appendChild(dragging);
     else list.insertBefore(dragging, after);
@@ -370,12 +380,17 @@ function renderHabits() {
 // Add Habit with Schedule
 let selectedEmoji = "🔥";
 let selectedColor = "#4c4cff";
-let selectedSchedule = "daily";
+let selectedTimesPerWeek = 1;
+let selectedTimeOfDay = "";
+let selectedTimeSlots = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   const emojiGrid = document.getElementById("emoji-grid");
   const colorGrid = document.getElementById("color-grid");
-  const scheduleSelect = document.getElementById("habit-schedule");
+  const timesPerWeekInput = document.getElementById("times-per-week");
+  const timeOfDayInput = document.getElementById("time-of-day");
+  const timeSlotsContainer = document.getElementById("time-slots-container");
+  const timeSlotsGrid = document.getElementById("time-slots-grid");
 
   const emojis = [
     "🔥",
@@ -472,8 +487,14 @@ document.addEventListener("DOMContentLoaded", () => {
   emojiGrid.firstChild.classList.add("selected");
   colorGrid.firstChild.classList.add("selected");
 
-  scheduleSelect.addEventListener("change", () => {
-    selectedSchedule = scheduleSelect.value;
+  // Handle times per week input change
+  timesPerWeekInput.addEventListener("change", () => {
+    selectedTimesPerWeek = parseInt(timesPerWeekInput.value) || 1;
+  });
+
+  // Handle time of day input change
+  timeOfDayInput.addEventListener("change", () => {
+    selectedTimeOfDay = timeOfDayInput.value;
   });
 
   const addBtn = document.getElementById("add-btn");
@@ -482,19 +503,26 @@ document.addEventListener("DOMContentLoaded", () => {
   addBtn.addEventListener("click", () => {
     const name = habitInput.value.trim();
     if (!name) return;
+
     habits.push({
       name,
       icon: selectedEmoji,
       color: selectedColor,
-      schedule: selectedSchedule,
+      timesPerWeek: selectedTimesPerWeek,
+      timeOfDay: selectedTimeOfDay,
+      timeSlots: [...selectedTimeSlots],
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
-      currentPeriodStart: getCurrentPeriodStart({ schedule: selectedSchedule }),
+      currentPeriodStart: new Date().toDateString(),
       doneToday: false,
       lastDoneDate: null,
     });
     habitInput.value = "";
+    timesPerWeekInput.value = "1";
+    timeOfDayInput.value = "";
+    timeSlotsContainer.style.display = "none";
+    selectedTimeSlots = [];
     document.getElementById("add-input").classList.remove("show");
     saveHabits();
     renderHabits();
@@ -537,7 +565,7 @@ document.getElementById("export-btn").addEventListener("click", () => {
 document
   .getElementById("import-btn")
   .addEventListener("click", () =>
-    document.getElementById("import-file").click()
+    document.getElementById("import-file").click(),
   );
 document.getElementById("import-file").addEventListener("change", (e) => {
   const file = e.target.files[0];
@@ -561,6 +589,127 @@ document.getElementById("import-file").addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 
+// Achievements System
+const achievements = [
+  {
+    id: "first-habit",
+    icon: "🌱",
+    name: "Getting Started",
+    desc: "Add your first habit",
+    check: () => habits.length >= 1,
+  },
+  {
+    id: "week-warrior",
+    icon: "⚡",
+    name: "Week Warrior",
+    desc: "7-day streak",
+    check: () => habits.some((h) => h.streak >= 7),
+  },
+  {
+    id: "legend",
+    icon: "👑",
+    name: "Legend",
+    desc: "30-day streak",
+    check: () => habits.some((h) => h.streak >= 30),
+  },
+  {
+    id: "habit-master",
+    icon: "🎯",
+    name: "Habit Master",
+    desc: "5 active habits",
+    check: () => habits.length >= 5,
+  },
+  {
+    id: "consistency",
+    icon: "📈",
+    name: "Consistency Pro",
+    desc: "All habits 100% complete",
+    check: () =>
+      habits.length > 0 &&
+      habits.every((h) => {
+        const timesPerWeek = h.timesPerWeek || 1;
+        return h.checksThisPeriod >= timesPerWeek;
+      }),
+  },
+  {
+    id: "century",
+    icon: "💎",
+    name: "Century Club",
+    desc: "100-day streak",
+    check: () => habits.some((h) => h.streak >= 100),
+  },
+  {
+    id: "daily-streak",
+    icon: "🔥",
+    name: "On Fire",
+    desc: "All habits completed today",
+    check: () => habits.length > 0 && habits.every((h) => h.doneToday),
+  },
+];
+
+function loadAchievements() {
+  return JSON.parse(localStorage.getItem("achievements")) || [];
+}
+
+function saveAchievements(unlockedIds) {
+  localStorage.setItem("achievements", JSON.stringify(unlockedIds));
+}
+
+function checkAchievements() {
+  let unlockedIds = loadAchievements();
+  const newUnlocks = [];
+
+  achievements.forEach((achievement) => {
+    if (!unlockedIds.includes(achievement.id) && achievement.check()) {
+      unlockedIds.push(achievement.id);
+      newUnlocks.push(achievement);
+    }
+  });
+
+  if (newUnlocks.length > 0) {
+    saveAchievements(unlockedIds);
+    showAchievementNotification(newUnlocks);
+  }
+
+  return unlockedIds;
+}
+
+function showAchievementNotification(newUnlocks) {
+  newUnlocks.forEach((achievement, idx) => {
+    setTimeout(() => {
+      const notif = document.createElement("div");
+      notif.className = "achievement-notification";
+      notif.innerHTML = `
+        <div style="font-size: 32px; margin-bottom: 8px;">${achievement.icon}</div>
+        <div style="font-weight: bold; margin-bottom: 4px;">Achievement Unlocked!</div>
+        <div style="font-size: 14px;">${achievement.name}</div>
+      `;
+      document.body.appendChild(notif);
+      setTimeout(() => notif.remove(), 3000);
+    }, idx * 400);
+  });
+}
+
+function renderAchievements() {
+  const unlockedIds = loadAchievements();
+  const grid = document.getElementById("achievements-grid");
+  grid.innerHTML = "";
+
+  achievements.forEach((achievement) => {
+    const btn = document.createElement("div");
+    btn.className = `achievement ${unlockedIds.includes(achievement.id) ? "unlocked" : ""}`;
+    btn.title = achievement.desc;
+    btn.innerHTML = `
+      <div class="achievement-icon">${achievement.icon}</div>
+      <div class="achievement-name">${achievement.name}</div>
+      <div class="achievement-desc">${achievement.desc}</div>
+    `;
+    grid.appendChild(btn);
+  });
+}
+
 // Initial render
 renderHabits();
 renderStats();
+renderAchievements();
+checkAchievements();

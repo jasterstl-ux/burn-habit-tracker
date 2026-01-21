@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -23,7 +23,7 @@
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () =>
-          navigator.serviceWorker.register("/sw.js")
+          navigator.serviceWorker.register("/sw.js"),
         );
       }
     </script>
@@ -38,6 +38,7 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="habits">Habits</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
+        <button class="tab-btn" data-tab="achievements">Achievements</button>
       </div>
 
       <div id="habits-tab" class="tab-content active">
@@ -91,6 +92,13 @@
         </div>
       </div>
 
+      <div id="achievements-tab" class="tab-content">
+        <div id="achievements-content">
+          <h2>🏆 Achievements</h2>
+          <div id="achievements-grid"></div>
+        </div>
+      </div>
+
       <div
         style="
           text-align: center;
@@ -117,14 +125,16 @@
       <div class="picker-label">Pick a color:</div>
       <div class="color-grid" id="color-grid"></div>
       <div class="picker-label">How often?</div>
-      <select id="habit-schedule">
-        <option value="daily">Every day</option>
-        <option value="every2days">Every 2 days</option>
-        <option value="weekly3">3 times per week</option>
-        <option value="weekly2">2 times per week</option>
-        <option value="weekly1">Once per week</option>
-        <option value="monthly">Once per month</option>
-      </select>
+      <div class="schedule-input-group">
+        <div class="schedule-row">
+          <label>Times per week:</label>
+          <input id="times-per-week" type="number" min="1" max="7" value="1" />
+        </div>
+        <div class="schedule-row">
+          <label>Time of day:</label>
+          <input id="time-of-day" type="time" />
+        </div>
+      </div>
       <button id="add-btn">Add</button>
     </div>
 
@@ -164,6 +174,49 @@
 
       document.getElementById("add-fab").addEventListener("click", () => {
         document.getElementById("add-input").classList.toggle("show");
+      });
+
+      // Tutorial Modal
+      function showTutorial() {
+        if (localStorage.getItem("tutorialSeen")) return;
+
+        const modal = document.createElement("div");
+        modal.id = "tutorial-modal";
+        modal.innerHTML = `
+          <div class="tutorial-content">
+            <h2>Welcome to Burn! 🔥</h2>
+            <div class="tutorial-body">
+              <h3>What is the Progress Percentage?</h3>
+              <p>The percentage shows <strong>how consistently you're completing your habit each week</strong>.</p>
+              <ul style="text-align: left; margin: 12px auto; max-width: 280px;">
+                <li><strong>If you set 3x/week:</strong> Checking off 1 = 33%, 2 = 67%, 3 = 100%</li>
+                <li><strong>If you set 1x/week:</strong> Checking off 1 = 100%</li>
+              </ul>
+              <p><em>It resets every Monday</em> to track your weekly consistency.</p>
+            </div>
+            <div class="tutorial-footer">
+              <button id="tutorial-close">Got it!</button>
+              <label>
+                <input type="checkbox" id="tutorial-dont-show">
+                Don't show again
+              </label>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        document
+          .getElementById("tutorial-close")
+          .addEventListener("click", () => {
+            if (document.getElementById("tutorial-dont-show").checked) {
+              localStorage.setItem("tutorialSeen", "true");
+            }
+            modal.remove();
+          });
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        setTimeout(showTutorial, 500);
       });
     </script>
 
