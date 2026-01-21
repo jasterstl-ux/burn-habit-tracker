@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Burn Quick Check</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        background: #f0f2f5;
+        font-family: system-ui;
+        text-align: center;
+      }
+      h1 {
+        color: #ff6b35;
+      }
+      .habit-btn {
+        display: block;
+        margin: 16px auto;
+        padding: 20px;
+        font-size: 24px;
+        width: 90%;
+        background: #4c4cff;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+      }
+      .habit-btn:active {
+        transform: scale(0.98);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Burn Quick Check</h1>
+    <div id="habits"></div>
+
+    <script>
+      // Quick check shares localStorage with main app
+      const habits = JSON.parse(localStorage.getItem("habits")) || [];
+      const today = new Date().toDateString();
+
+      const container = document.getElementById("habits");
+      habits.forEach((habit, i) => {
+        const btn = document.createElement("button");
+        btn.className = "habit-btn";
+        btn.textContent = habit.icon + " " + habit.name;
+        btn.onclick = () => {
+          habit.doneToday = true;
+          habit.lastDoneDate = today;
+          habit.checksThisPeriod = (habit.checksThisPeriod || 0) + 1;
+          habit.streak = (habit.streak || 0) + 1;
+          habit.strength = Math.min(
+            100,
+            habit.strength + (100 - habit.strength) * 0.1
+          );
+          confetti({ particleCount: 150, spread: 70 });
+          alert("Checked! 🔥");
+          localStorage.setItem("habits", JSON.stringify(habits));
+          // Optional: message main app to refresh if open
+          navigator.serviceWorker.ready.then((reg) =>
+            reg.active.postMessage({ type: "habit-checked" })
+          );
+        };
+        container.appendChild(btn);
+      });
+    </script>
+  </body>
+</html>
