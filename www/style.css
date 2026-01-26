@@ -304,6 +304,7 @@ header {
 }
 
 .delete-btn {
+  margin-left: auto;
   background: #e53935;
   color: white;
   border: none;
