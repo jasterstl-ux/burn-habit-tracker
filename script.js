@@ -52,6 +52,7 @@ async function scheduleHabitReminder(habit) {
           schedule: {
             on: { hour, minute },
             repeats: true,
+            allowWhileIdle: true,
           },
         },
       ],
