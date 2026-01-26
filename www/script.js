@@ -1,5 +1,89 @@
 const habits = JSON.parse(localStorage.getItem("habits")) || [];
 const today = new Date().toDateString();
+const capacitorNotifications =
+  window.Capacitor?.Plugins?.LocalNotifications || null;
+
+function ensureHabitId(habit) {
+  if (!habit.id) {
+    habit.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  return habit.id;
+}
+
+function getReminderId(habit) {
+  const raw = ensureHabitId(habit);
+  let hash = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    hash = (hash * 31 + raw.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash % 2147483647);
+}
+
+function parseTimeValue(timeValue, fallback = "08:00") {
+  const value = timeValue || fallback;
+  const [hour, minute] = value.split(":").map((part) => parseInt(part, 10));
+  return {
+    hour: Number.isFinite(hour) ? hour : 8,
+    minute: Number.isFinite(minute) ? minute : 0,
+  };
+}
+
+async function scheduleHabitReminder(habit) {
+  if (!capacitorNotifications) return;
+  if (!habit.reminderEnabled) return;
+
+  const { hour, minute } = parseTimeValue(habit.timeOfDay);
+  const notificationId = getReminderId(habit);
+
+  try {
+    const permission = await capacitorNotifications.requestPermissions();
+    if (permission?.display && permission.display !== "granted") {
+      return;
+    }
+    await capacitorNotifications.cancel({
+      notifications: [{ id: notificationId }],
+    });
+    await capacitorNotifications.schedule({
+      notifications: [
+        {
+          id: notificationId,
+          title: "Habit Reminder",
+          body: habit.name,
+          schedule: {
+            on: { hour, minute },
+            repeats: true,
+          },
+        },
+      ],
+    });
+  } catch (error) {
+    console.warn("Failed to schedule reminder", error);
+  }
+}
+
+async function cancelHabitReminder(habit) {
+  if (!capacitorNotifications) return;
+  const notificationId = getReminderId(habit);
+  try {
+    await capacitorNotifications.cancel({
+      notifications: [{ id: notificationId }],
+    });
+  } catch (error) {
+    console.warn("Failed to cancel reminder", error);
+  }
+}
+
+async function syncReminders() {
+  if (!capacitorNotifications) return;
+  for (const habit of habits) {
+    ensureHabitId(habit);
+    if (habit.reminderEnabled) {
+      await scheduleHabitReminder(habit);
+    } else {
+      await cancelHabitReminder(habit);
+    }
+  }
+}
 
 // Schedule definitions
 const schedules = {
@@ -321,7 +405,10 @@ function renderHabits() {
       e.stopPropagation();
       let menu = document.createElement("div");
       menu.className = "habit-dropdown-menu";
-      menu.innerHTML = `<button class="edit-streak-btn">Edit Streak</button>`;
+      menu.innerHTML = `
+        <button class="edit-habit-btn">Edit Habit</button>
+        <button class="edit-streak-btn">Edit Streak</button>
+      `;
       document.body.appendChild(menu);
       const rect = e.target.getBoundingClientRect();
       menu.style.position = "absolute";
@@ -334,12 +421,112 @@ function renderHabits() {
           document.removeEventListener("click", handler);
         });
       }, 10);
+      menu.querySelector(".edit-habit-btn").onclick = (ev) => {
+        ev.stopPropagation();
+        menu.remove();
+        showEditHabitModal(habit, index);
+      };
       menu.querySelector(".edit-streak-btn").onclick = (ev) => {
         ev.stopPropagation();
         menu.remove();
         showEditStreakModal(habit, index);
       };
     });
+    // Modal for editing habit fields
+    function showEditHabitModal(habit, index) {
+      let modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      const timesPerWeek = habit.timesPerWeek || 1;
+      const timeOfDay = habit.timeOfDay || "";
+      const reminderEnabled = !!habit.reminderEnabled;
+      modal.innerHTML = `
+        <div class="modal-content">
+          <h3>Edit Habit</h3>
+          <div style="display:grid; gap:12px; text-align:left;">
+            <label>
+              <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Name</div>
+              <input type="text" id="edit-habit-name" value="${habit.name}" />
+            </label>
+            <label>
+              <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Emoji</div>
+              <input type="text" id="edit-habit-emoji" value="${habit.icon || "🔥"}" maxlength="4" />
+            </label>
+            <label>
+              <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Color</div>
+              <input type="color" id="edit-habit-color" value="${habit.color || "#4c4cff"}" />
+            </label>
+            <label>
+              <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Times per week</div>
+              <input type="number" id="edit-habit-times" min="1" max="7" value="${timesPerWeek}" />
+            </label>
+            <label>
+              <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Time of day</div>
+              <input type="time" id="edit-habit-time" value="${timeOfDay}" />
+            </label>
+            <label style="display:flex; align-items:center; gap:10px;">
+              <input type="checkbox" id="edit-habit-reminder" ${
+                reminderEnabled ? "checked" : ""
+              } />
+              <span>Daily alarm</span>
+            </label>
+          </div>
+          <div style="margin-top:16px;">
+            <button id="save-habit-btn">Save</button>
+            <button id="cancel-habit-btn">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById("edit-habit-name").focus();
+      document.getElementById("save-habit-btn").onclick = async () => {
+        const newName = document.getElementById("edit-habit-name").value.trim();
+        const newEmoji = document
+          .getElementById("edit-habit-emoji")
+          .value.trim();
+        const newColor = document.getElementById("edit-habit-color").value;
+        const newTimes = Math.max(
+          1,
+          Math.min(
+            7,
+            parseInt(document.getElementById("edit-habit-times").value) || 1,
+          ),
+        );
+        const newTime = document.getElementById("edit-habit-time").value;
+        const reminderOn = document.getElementById(
+          "edit-habit-reminder",
+        ).checked;
+
+        habit.name = newName || habit.name;
+        habit.icon = newEmoji || habit.icon || "🔥";
+        habit.color = newColor || habit.color || "#4c4cff";
+        habit.timesPerWeek = newTimes;
+        habit.timeOfDay = reminderOn
+          ? newTime || habit.timeOfDay || "08:00"
+          : newTime || "";
+        habit.reminderEnabled = reminderOn;
+        habit.checksThisPeriod = Math.min(
+          habit.checksThisPeriod || 0,
+          habit.timesPerWeek,
+        );
+        habit.currentPeriodStart = getCurrentPeriodStart(habit);
+        habit.completedToday = habit.doneToday && habit.checksThisPeriod > 0;
+
+        if (habit.reminderEnabled) {
+          await scheduleHabitReminder(habit);
+        } else {
+          await cancelHabitReminder(habit);
+        }
+
+        saveHabits();
+        renderHabits();
+        checkAchievements();
+        renderAchievements();
+        if (document.querySelector('[data-tab="stats"].active')) renderStats();
+        modal.remove();
+      };
+      document.getElementById("cancel-habit-btn").onclick = () =>
+        modal.remove();
+    }
     // Modal for editing streak
     function showEditStreakModal(habit, index) {
       let modal = document.createElement("div");
@@ -499,6 +686,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const colorGrid = document.getElementById("color-grid");
   const timesPerWeekInput = document.getElementById("times-per-week");
   const timeOfDayInput = document.getElementById("time-of-day");
+  const dailyAlarmInput = document.getElementById("daily-alarm");
   const timeSlotsContainer = document.getElementById("time-slots-container");
   const timeSlotsGrid = document.getElementById("time-slots-grid");
 
@@ -615,6 +803,7 @@ document.addEventListener("DOMContentLoaded", () => {
     habitInput.value = "";
     timesPerWeekInput.value = "1";
     timeOfDayInput.value = "";
+    if (dailyAlarmInput) dailyAlarmInput.checked = false;
     selectedEmoji = "🔥";
     selectedColor = "#4c4cff";
     selectedTimesPerWeek = 1;
@@ -633,25 +822,35 @@ document.addEventListener("DOMContentLoaded", () => {
     const name = habitInput.value.trim();
     if (!name) return;
 
-    habits.push({
+    const reminderEnabled = dailyAlarmInput?.checked || false;
+    const reminderTime =
+      timeOfDayInput.value || (reminderEnabled ? "08:00" : "");
+
+    const habit = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       name,
       icon: selectedEmoji,
       color: selectedColor,
       timesPerWeek: parseInt(timesPerWeekInput.value) || 1,
-      timeOfDay: timeOfDayInput.value,
+      timeOfDay: reminderTime,
       timeSlots: [...selectedTimeSlots],
+      reminderEnabled,
       streak: 0,
       strength: 0,
       checksThisPeriod: 0,
       currentPeriodStart: new Date().toDateString(),
       doneToday: false,
       lastDoneDate: null,
-    });
+    };
+    habits.push(habit);
     saveHabits();
     renderHabits();
     renderStats();
+    syncReminders();
     resetAddHabitModal();
   });
+
+  syncReminders();
 
   cancelBtn.addEventListener("click", resetAddHabitModal);
 
