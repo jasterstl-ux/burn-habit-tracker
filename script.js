@@ -408,6 +408,10 @@ function renderHabits() {
     });
 
     li.querySelector(".delete-btn").addEventListener("click", () => {
+      const confirmed = window.confirm(
+        `Delete "${habit.name}"? This action cannot be undone.`,
+      );
+      if (!confirmed) return;
       habits.splice(index, 1);
       saveHabits();
       renderHabits();
