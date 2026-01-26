@@ -215,7 +215,15 @@ function renderStats() {
   const todayDone = habits.filter((h) => h.doneToday).length;
   const avgStrength = habits.length
     ? Math.round(
-        habits.reduce((sum, h) => sum + (h.strength || 0), 0) / habits.length,
+        habits.reduce((sum, h) => {
+          const timesPerWeek = h.timesPerWeek || 1;
+          const checksThisPeriod = h.checksThisPeriod || 0;
+          const pct = Math.min(
+            100,
+            Math.round((checksThisPeriod / timesPerWeek) * 100),
+          );
+          return sum + pct;
+        }, 0) / habits.length,
       )
     : 0;
 
@@ -336,10 +344,21 @@ function renderHabits() {
     function showEditStreakModal(habit, index) {
       let modal = document.createElement("div");
       modal.className = "modal-overlay";
+      const timesPerWeek = habit.timesPerWeek || 1;
+      const checksThisPeriod = habit.checksThisPeriod || 0;
       modal.innerHTML = `
     <div class="modal-content">
       <h3>Edit Streak for <span style="color:${habit.color}">${habit.name}</span></h3>
-      <input type="number" id="edit-streak-input" min="0" value="${habit.streak}" style="width:80px;font-size:1.2em;" />
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <div>
+          <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Streak</div>
+          <input type="number" id="edit-streak-input" min="0" value="${habit.streak}" style="width:80px;font-size:1.2em;" />
+        </div>
+        <div>
+          <div style="font-size:0.85em; margin-bottom:6px; color:#666;">Checks this week</div>
+          <input type="number" id="edit-checks-input" min="0" max="${timesPerWeek}" value="${checksThisPeriod}" style="width:80px;font-size:1.2em;" />
+        </div>
+      </div>
       <div style="margin-top:16px;">
         <button id="save-streak-btn">Save</button>
         <button id="cancel-streak-btn">Cancel</button>
@@ -351,11 +370,22 @@ function renderHabits() {
       document.getElementById("save-streak-btn").onclick = () => {
         const newStreak =
           parseInt(document.getElementById("edit-streak-input").value) || 0;
+        const newChecks = Math.max(
+          0,
+          Math.min(
+            timesPerWeek,
+            parseInt(document.getElementById("edit-checks-input").value) || 0,
+          ),
+        );
         habit.streak = newStreak;
+        habit.checksThisPeriod = newChecks;
+        habit.currentPeriodStart = getCurrentPeriodStart(habit);
+        habit.completedToday = habit.doneToday && newChecks > 0;
         saveHabits();
         renderHabits();
         checkAchievements();
         renderAchievements();
+        if (document.querySelector('[data-tab="stats"].active')) renderStats();
         modal.remove();
       };
       document.getElementById("cancel-streak-btn").onclick = () =>
@@ -743,31 +773,60 @@ const achievements = [
   },
 ];
 
-function loadAchievements() {
-  return JSON.parse(localStorage.getItem("achievements")) || [];
+const weeklyAchievementIds = new Set(["consistency", "daily-streak"]);
+
+function getWeekKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = (d.getDay() + 6) % 7; // Monday=0
+  d.setDate(d.getDate() - day);
+  return d.toISOString().slice(0, 10);
 }
 
-function saveAchievements(unlockedIds) {
-  localStorage.setItem("achievements", JSON.stringify(unlockedIds));
+function loadAchievementsState() {
+  const stored = JSON.parse(localStorage.getItem("achievements")) || null;
+  if (Array.isArray(stored)) {
+    return {
+      lifetime: stored,
+      weekly: { weekKey: getWeekKey(), unlocked: [] },
+    };
+  }
+
+  return (
+    stored || {
+      lifetime: [],
+      weekly: { weekKey: getWeekKey(), unlocked: [] },
+    }
+  );
+}
+
+function saveAchievementsState(state) {
+  localStorage.setItem("achievements", JSON.stringify(state));
 }
 
 function checkAchievements() {
-  let unlockedIds = loadAchievements();
+  const state = loadAchievementsState();
+  const currentWeekKey = getWeekKey();
+  if (state.weekly.weekKey !== currentWeekKey) {
+    state.weekly = { weekKey: currentWeekKey, unlocked: [] };
+  }
+
   const newUnlocks = [];
 
   achievements.forEach((achievement) => {
-    if (!unlockedIds.includes(achievement.id) && achievement.check()) {
-      unlockedIds.push(achievement.id);
+    const isWeekly = weeklyAchievementIds.has(achievement.id);
+    const unlockedList = isWeekly ? state.weekly.unlocked : state.lifetime;
+    if (!unlockedList.includes(achievement.id) && achievement.check()) {
+      unlockedList.push(achievement.id);
       newUnlocks.push(achievement);
     }
   });
 
   if (newUnlocks.length > 0) {
-    saveAchievements(unlockedIds);
+    saveAchievementsState(state);
     showAchievementNotification(newUnlocks);
   }
 
-  return unlockedIds;
+  return { lifetime: state.lifetime, weekly: state.weekly.unlocked };
 }
 
 function showAchievementNotification(newUnlocks) {
@@ -787,13 +846,14 @@ function showAchievementNotification(newUnlocks) {
 }
 
 function renderAchievements() {
-  const unlockedIds = loadAchievements();
+  const state = loadAchievementsState();
+  const unlockedIds = new Set([...state.lifetime, ...state.weekly.unlocked]);
   const grid = document.getElementById("achievements-grid");
   grid.innerHTML = "";
 
   achievements.forEach((achievement) => {
     const btn = document.createElement("div");
-    btn.className = `achievement ${unlockedIds.includes(achievement.id) ? "unlocked" : ""}`;
+    btn.className = `achievement ${unlockedIds.has(achievement.id) ? "unlocked" : ""}`;
     btn.title = achievement.desc;
     btn.innerHTML = `
       <div class="achievement-icon">${achievement.icon}</div>
