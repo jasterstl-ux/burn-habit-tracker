@@ -365,8 +365,17 @@ function renderHabits() {
     li.querySelector(".habit-check").addEventListener("change", (e) => {
       const prev = habit.streak;
       habit.doneToday = e.target.checked;
-      habit.lastDoneDate = today;
       if (e.target.checked) {
+        if (!habit._preCheckState) {
+          habit._preCheckState = {
+            streak: habit.streak || 0,
+            strength: habit.strength || 0,
+            checksThisPeriod: habit.checksThisPeriod || 0,
+            completedToday: !!habit.completedToday,
+            lastDoneDate: habit.lastDoneDate || null,
+          };
+        }
+        habit.lastDoneDate = today;
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         if (
@@ -378,6 +387,18 @@ function renderHabits() {
           habit.streak += 1;
         }
         if (habit.streak > prev) celebrate(habit.streak);
+      } else {
+        if (habit._preCheckState) {
+          habit.streak = habit._preCheckState.streak;
+          habit.strength = habit._preCheckState.strength;
+          habit.checksThisPeriod = habit._preCheckState.checksThisPeriod;
+          habit.completedToday = habit._preCheckState.completedToday;
+          habit.lastDoneDate = habit._preCheckState.lastDoneDate;
+          delete habit._preCheckState;
+        } else if (habit.lastDoneDate === today && habit.streak > 0) {
+          habit.streak -= 1;
+          habit.lastDoneDate = null;
+        }
       }
       saveHabits();
       renderHabits();

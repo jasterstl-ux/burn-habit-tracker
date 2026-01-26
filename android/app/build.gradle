@@ -48,6 +48,14 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
+// Override Capacitor defaults to keep Java 17 compatibility for this project.
+android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
