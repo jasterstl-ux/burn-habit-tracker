@@ -2,4 +2,12 @@ package com.burnhabittracker.app;
 
 import com.getcapacitor.BridgeActivity;
 
-public class MainActivity extends BridgeActivity {}
+import android.os.Bundle;
+
+public class MainActivity extends BridgeActivity {
+	@Override
+	protected void onResume() {
+		super.onResume();
+		TodayWidgetProvider.updateAll(this);
+	}
+}

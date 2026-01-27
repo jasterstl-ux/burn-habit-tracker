@@ -76,6 +76,16 @@ async function cancelHabitReminder(habit) {
 
 async function syncReminders() {
   if (!capacitorNotifications) return;
+  try {
+    const pending = await capacitorNotifications.getPending();
+    if (pending?.notifications?.length) {
+      await capacitorNotifications.cancel({
+        notifications: pending.notifications.map((n) => ({ id: n.id })),
+      });
+    }
+  } catch (error) {
+    console.warn("Failed to cancel pending reminders", error);
+  }
   for (const habit of habits) {
     ensureHabitId(habit);
     if (habit.reminderEnabled) {
@@ -84,6 +94,28 @@ async function syncReminders() {
       await cancelHabitReminder(habit);
     }
   }
+}
+
+function normalizeHabitsForToday() {
+  let changed = false;
+  habits.forEach((habit) => {
+    const before = {
+      doneToday: habit.doneToday,
+      checksThisPeriod: habit.checksThisPeriod,
+      currentPeriodStart: habit.currentPeriodStart,
+      completedToday: habit.completedToday,
+    };
+    updateProgress(habit);
+    if (
+      habit.doneToday !== before.doneToday ||
+      habit.checksThisPeriod !== before.checksThisPeriod ||
+      habit.currentPeriodStart !== before.currentPeriodStart ||
+      habit.completedToday !== before.completedToday
+    ) {
+      changed = true;
+    }
+  });
+  if (changed) saveHabits();
 }
 
 // Schedule definitions
@@ -135,6 +167,11 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.add("active");
     document.getElementById(btn.dataset.tab + "-tab").classList.add("active");
     if (btn.dataset.tab === "stats") renderStats();
+    if (btn.dataset.tab === "achievements") {
+      normalizeHabitsForToday();
+      checkAchievements();
+      renderAchievements();
+    }
   });
 });
 
@@ -194,18 +231,25 @@ function triggerVictory(streak) {
       particleCount: 100,
       spread: 180,
       origin: { y: 0.1 },
+          if (btn.dataset.tab === "achievements") {
+            checkAchievements();
+            renderAchievements();
+          }
     });
 
     burst++;
     if (burst >= maxBursts) clearInterval(interval);
   }, 400);
+        let didReset = false;
 
   if ("vibrate" in navigator) navigator.vibrate([400, 200, 400, 200, 600]);
 
+          didReset = true;
   overlay.querySelector(".close-victory").onclick = () => overlay.remove();
 }
 
 function saveHabits() {
+          didReset = true;
   localStorage.setItem("habits", JSON.stringify(habits));
 }
 
@@ -224,26 +268,27 @@ function getCurrentPeriodStart(habit) {
   const start = new Date();
   const daysSinceEpoch = Math.floor(start.getTime() / 86400000);
   const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % periodDays);
-  const periodStart = new Date(periodStartEpoch * 86400000);
-  return periodStart.toDateString();
-}
-
+        if (newUnlocks.length > 0) {
+          saveAchievementsState(state);
+          showAchievementNotification(newUnlocks);
+        } else if (didReset) {
+          saveAchievementsState(state);
+        }
 function updateProgress(habit) {
   if (!habit.timesPerWeek) habit.timesPerWeek = 1;
-  if (!habit.checksThisPeriod) habit.checksThisPeriod = 0;
-  if (!habit.currentPeriodStart)
-    habit.currentPeriodStart = getCurrentPeriodStart(habit);
+        const state = loadAchievementsState();
 
-  const currentPeriod = getCurrentPeriodStart(habit);
-  if (habit.currentPeriodStart !== currentPeriod) {
-    habit.checksThisPeriod = 0;
-    habit.currentPeriodStart = currentPeriod;
-    habit.completedToday = false;
+  if (
+    habit.lastDoneDate &&
+    new Date(habit.lastDoneDate).toDateString() !== today
+  ) {
+    habit.doneToday = false;
   }
 
   // Track if we've already counted today's completion
   if (!habit.completedToday && habit.doneToday) {
     if (habit.checksThisPeriod < habit.timesPerWeek) {
+            cancelHabitReminder(habit);
       habit.checksThisPeriod += 1;
       habit.completedToday = true;
     }
@@ -630,10 +675,12 @@ function renderHabits() {
         `Delete "${habit.name}"? This action cannot be undone.`,
       );
       if (!confirmed) return;
+      cancelHabitReminder(habit);
       habits.splice(index, 1);
       saveHabits();
       renderHabits();
       renderStats();
+      syncReminders();
     });
 
     li.addEventListener("dragstart", () => li.classList.add("dragging"));
@@ -852,6 +899,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   syncReminders();
+  writeHabitsForWidget();
 
   cancelBtn.addEventListener("click", resetAddHabitModal);
 
@@ -906,6 +954,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
         saveHabits();
         renderHabits();
         renderStats();
+        writeHabitsForWidget();
         alert("Backup restored! 🔥");
       }
     } catch (err) {
@@ -969,11 +1018,19 @@ const achievements = [
     icon: "🔥",
     name: "On Fire",
     desc: "All habits completed today",
-    check: () => habits.length > 0 && habits.every((h) => h.doneToday),
+    check: () =>
+      habits.length > 0 &&
+      habits.every(
+        (h) =>
+          h.doneToday &&
+          h.lastDoneDate &&
+          new Date(h.lastDoneDate).toDateString() === today,
+      ),
   },
 ];
 
-const weeklyAchievementIds = new Set(["consistency", "daily-streak"]);
+const weeklyAchievementIds = new Set(["consistency", "week-warrior"]);
+const dailyAchievementIds = new Set(["daily-streak"]);
 
 function getWeekKey(date = new Date()) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -982,21 +1039,20 @@ function getWeekKey(date = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+function getDayKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return d.toISOString().slice(0, 10);
+}
+
 function loadAchievementsState() {
   const stored = JSON.parse(localStorage.getItem("achievements")) || null;
-  if (Array.isArray(stored)) {
-    return {
-      lifetime: stored,
-      weekly: { weekKey: getWeekKey(), unlocked: [] },
-    };
-  }
+  const baseState = Array.isArray(stored) ? { lifetime: stored } : stored || {};
 
-  return (
-    stored || {
-      lifetime: [],
-      weekly: { weekKey: getWeekKey(), unlocked: [] },
-    }
-  );
+  return {
+    lifetime: baseState.lifetime || [],
+    weekly: baseState.weekly || { weekKey: getWeekKey(), unlocked: [] },
+    daily: baseState.daily || { dayKey: getDayKey(), unlocked: [] },
+  };
 }
 
 function saveAchievementsState(state) {
@@ -1005,16 +1061,28 @@ function saveAchievementsState(state) {
 
 function checkAchievements() {
   const state = loadAchievementsState();
+  let didReset = false;
   const currentWeekKey = getWeekKey();
   if (state.weekly.weekKey !== currentWeekKey) {
     state.weekly = { weekKey: currentWeekKey, unlocked: [] };
+    didReset = true;
+  }
+  const currentDayKey = getDayKey();
+  if (state.daily.dayKey !== currentDayKey) {
+    state.daily = { dayKey: currentDayKey, unlocked: [] };
+    didReset = true;
   }
 
   const newUnlocks = [];
 
   achievements.forEach((achievement) => {
     const isWeekly = weeklyAchievementIds.has(achievement.id);
-    const unlockedList = isWeekly ? state.weekly.unlocked : state.lifetime;
+    const isDaily = dailyAchievementIds.has(achievement.id);
+    const unlockedList = isDaily
+      ? state.daily.unlocked
+      : isWeekly
+        ? state.weekly.unlocked
+        : state.lifetime;
     if (!unlockedList.includes(achievement.id) && achievement.check()) {
       unlockedList.push(achievement.id);
       newUnlocks.push(achievement);
@@ -1024,9 +1092,15 @@ function checkAchievements() {
   if (newUnlocks.length > 0) {
     saveAchievementsState(state);
     showAchievementNotification(newUnlocks);
+  } else if (didReset) {
+    saveAchievementsState(state);
   }
 
-  return { lifetime: state.lifetime, weekly: state.weekly.unlocked };
+  return {
+    lifetime: state.lifetime,
+    weekly: state.weekly.unlocked,
+    daily: state.daily.unlocked,
+  };
 }
 
 function showAchievementNotification(newUnlocks) {
@@ -1046,8 +1120,14 @@ function showAchievementNotification(newUnlocks) {
 }
 
 function renderAchievements() {
+  normalizeHabitsForToday();
+  checkAchievements();
   const state = loadAchievementsState();
-  const unlockedIds = new Set([...state.lifetime, ...state.weekly.unlocked]);
+  const unlockedIds = new Set([
+    ...state.lifetime,
+    ...state.weekly.unlocked,
+    ...state.daily.unlocked,
+  ]);
   const grid = document.getElementById("achievements-grid");
   grid.innerHTML = "";
 
