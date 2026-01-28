@@ -2,6 +2,8 @@ const habits = JSON.parse(localStorage.getItem("habits")) || [];
 const today = new Date().toDateString();
 const capacitorNotifications =
   window.Capacitor?.Plugins?.LocalNotifications || null;
+const capacitorFilesystem = window.Capacitor?.Plugins?.Filesystem || null;
+const widgetPlugin = window.Capacitor?.Plugins?.WidgetPlugin || null;
 
 function ensureHabitId(habit) {
   if (!habit.id) {
@@ -249,8 +251,33 @@ function triggerVictory(streak) {
 }
 
 function saveHabits() {
-          didReset = true;
   localStorage.setItem("habits", JSON.stringify(habits));
+  writeHabitsForWidget();
+}
+
+async function writeHabitsForWidget() {
+  if (!capacitorFilesystem) return;
+  try {
+    const widgetDate = new Date().toISOString().slice(0, 10);
+    const total = habits.length;
+    const done = habits.filter((h) => h.doneToday).length;
+    const habitsList = habits.map((h) => ({
+      name: h.name,
+      done: !!h.doneToday,
+    }));
+    const data = JSON.stringify({ date: widgetDate, total, done, habits: habitsList });
+    await capacitorFilesystem.writeFile({
+      path: "habits-widget.json",
+      data,
+      directory: "DATA",
+      encoding: "utf8",
+    });
+    if (widgetPlugin?.refresh) {
+      await widgetPlugin.refresh();
+    }
+  } catch (error) {
+    console.warn("Failed to write widget data", error);
+  }
 }
 
 function getBadge(streak) {
@@ -268,15 +295,22 @@ function getCurrentPeriodStart(habit) {
   const start = new Date();
   const daysSinceEpoch = Math.floor(start.getTime() / 86400000);
   const periodStartEpoch = daysSinceEpoch - (daysSinceEpoch % periodDays);
-        if (newUnlocks.length > 0) {
-          saveAchievementsState(state);
-          showAchievementNotification(newUnlocks);
-        } else if (didReset) {
-          saveAchievementsState(state);
-        }
+  const periodStart = new Date(periodStartEpoch * 86400000);
+  return periodStart.toDateString();
+}
+
 function updateProgress(habit) {
   if (!habit.timesPerWeek) habit.timesPerWeek = 1;
-        const state = loadAchievementsState();
+  if (!habit.checksThisPeriod) habit.checksThisPeriod = 0;
+  if (!habit.currentPeriodStart)
+    habit.currentPeriodStart = getCurrentPeriodStart(habit);
+
+  const currentPeriod = getCurrentPeriodStart(habit);
+  if (habit.currentPeriodStart !== currentPeriod) {
+    habit.checksThisPeriod = 0;
+    habit.currentPeriodStart = currentPeriod;
+    habit.completedToday = false;
+  }
 
   if (
     habit.lastDoneDate &&
@@ -286,9 +320,9 @@ function updateProgress(habit) {
   }
 
   // Track if we've already counted today's completion
+  // Track if we've already counted today's completion
   if (!habit.completedToday && habit.doneToday) {
     if (habit.checksThisPeriod < habit.timesPerWeek) {
-            cancelHabitReminder(habit);
       habit.checksThisPeriod += 1;
       habit.completedToday = true;
     }

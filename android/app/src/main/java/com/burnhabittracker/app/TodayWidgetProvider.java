@@ -15,6 +15,9 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class TodayWidgetProvider extends AppWidgetProvider {
 
@@ -53,7 +56,7 @@ public class TodayWidgetProvider extends AppWidgetProvider {
     private static HabitSummary loadSummary(Context context) {
         File file = new File(context.getFilesDir(), "habits-widget.json");
         if (!file.exists()) {
-            return new HabitSummary(0, 0, "Open the app to start");
+            return new HabitSummary(0, 0, "Add a habit in the app");
         }
 
         StringBuilder jsonBuilder = new StringBuilder();
@@ -64,6 +67,11 @@ public class TodayWidgetProvider extends AppWidgetProvider {
             }
 
             JSONObject root = new JSONObject(jsonBuilder.toString());
+            String payloadDate = root.optString("date", "");
+            String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+            if (!today.equals(payloadDate)) {
+                return new HabitSummary(0, 0, "Day changed — open app");
+            }
             int total = root.optInt("total", 0);
             int done = root.optInt("done", 0);
             JSONArray items = root.optJSONArray("habits");

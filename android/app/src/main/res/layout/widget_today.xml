@@ -3,7 +3,7 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
+    android:background="@drawable/widget_today_bg"
     android:orientation="vertical"
     android:padding="12dp">
 
@@ -11,9 +11,9 @@
         android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Burn Today"
-        android:textColor="#111111"
-        android:textSize="16sp"
+        android:text="🔥 Burn Today"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
         android:textStyle="bold" />
 
     <TextView
@@ -22,8 +22,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:text="Done 0/0"
-        android:textColor="#333333"
-        android:textSize="13sp" />
+        android:textColor="#F8FAFC"
+        android:textSize="13sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/widget_list"
@@ -31,6 +32,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="No habits yet"
-        android:textColor="#444444"
+        android:textColor="#E2E8F0"
         android:textSize="12sp" />
 </LinearLayout>

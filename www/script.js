@@ -3,6 +3,7 @@ const today = new Date().toDateString();
 const capacitorNotifications =
   window.Capacitor?.Plugins?.LocalNotifications || null;
 const capacitorFilesystem = window.Capacitor?.Plugins?.Filesystem || null;
+const widgetPlugin = window.Capacitor?.Plugins?.WidgetPlugin || null;
 
 function ensureHabitId(habit) {
   if (!habit.id) {
@@ -251,18 +252,28 @@ function saveHabits() {
 async function writeHabitsForWidget() {
   if (!capacitorFilesystem) return;
   try {
+    const widgetDate = new Date().toISOString().slice(0, 10);
     const total = habits.length;
     const done = habits.filter((h) => h.doneToday).length;
     const habitsList = habits.map((h) => ({
       name: h.name,
       done: !!h.doneToday,
     }));
-    const data = JSON.stringify({ total, done, habits: habitsList });
+    const data = JSON.stringify({
+      date: widgetDate,
+      total,
+      done,
+      habits: habitsList,
+    });
     await capacitorFilesystem.writeFile({
       path: "habits-widget.json",
       data,
       directory: "DATA",
+      encoding: "utf8",
     });
+    if (widgetPlugin?.refresh) {
+      await widgetPlugin.refresh();
+    }
   } catch (error) {
     console.warn("Failed to write widget data", error);
   }
