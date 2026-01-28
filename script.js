@@ -4,6 +4,7 @@ const capacitorNotifications =
   window.Capacitor?.Plugins?.LocalNotifications || null;
 const capacitorFilesystem = window.Capacitor?.Plugins?.Filesystem || null;
 const widgetPlugin = window.Capacitor?.Plugins?.WidgetPlugin || null;
+const sharePlugin = window.Capacitor?.Plugins?.Share || null;
 
 function ensureHabitId(habit) {
   if (!habit.id) {
@@ -959,15 +960,105 @@ installBtn.addEventListener("click", async () => {
 });
 
 // Export / Import
+function escapeCsv(value) {
+  if (value === null || value === undefined) return "";
+  const stringValue = String(value);
+  if (/["]|,|\n/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+async function exportFile(filename, data, mimeType) {
+  const platform = window.Capacitor?.getPlatform?.() || "web";
+  const isNative = platform !== "web" && !!capacitorFilesystem;
+
+  if (!isNative) {
+    const blob = new Blob([data], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  try {
+    await capacitorFilesystem.writeFile({
+      path: filename,
+      data,
+      directory: "DOCUMENTS",
+      encoding: "utf8",
+    });
+    const uri = await capacitorFilesystem.getUri({
+      path: filename,
+      directory: "DOCUMENTS",
+    });
+
+    if (sharePlugin?.share && uri?.uri) {
+      await sharePlugin.share({
+        title: "Burn Export",
+        text: "Your export is ready.",
+        url: uri.uri,
+      });
+    } else {
+      alert(`Saved to: ${uri?.uri || filename}`);
+    }
+  } catch (error) {
+    console.warn("Export failed", error);
+    alert("Export failed. Please try again.");
+  }
+}
+
+document.getElementById("export-csv-btn")?.addEventListener("click", () => {
+  const headers = [
+    "name",
+    "emoji",
+    "color",
+    "timesPerWeek",
+    "timeOfDay",
+    "reminderEnabled",
+    "streak",
+    "strength",
+    "checksThisPeriod",
+    "currentPeriodStart",
+    "doneToday",
+    "lastDoneDate",
+  ];
+  const rows = habits.map((habit) => [
+    habit.name,
+    habit.icon || "",
+    habit.color || "",
+    habit.timesPerWeek || 1,
+    habit.timeOfDay || "",
+    habit.reminderEnabled ? "true" : "false",
+    habit.streak || 0,
+    habit.strength || 0,
+    habit.checksThisPeriod || 0,
+    habit.currentPeriodStart || "",
+    habit.doneToday ? "true" : "false",
+    habit.lastDoneDate || "",
+  ]);
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map(escapeCsv).join(","))
+    .join("\n");
+
+  exportFile(
+    `burn-export-${new Date().toISOString().slice(0, 10)}.csv`,
+    csv,
+    "text/csv",
+  );
+});
+
 document.getElementById("export-btn").addEventListener("click", () => {
   const data = JSON.stringify(habits, null, 2);
-  const blob = new Blob([data], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `burn-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  exportFile(
+    `burn-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    data,
+    "application/json",
+  );
 });
 
 document

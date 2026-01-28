@@ -51,43 +51,23 @@
           <div id="stats-grid"></div>
           <div id="calendar-heatmap"></div>
 
-          <div style="margin-top: 40px; text-align: center">
-            <button
-              id="export-btn"
-              style="
-                background: #ff6b35;
-                color: white;
-                padding: 12px 24px;
-                border: none;
-                border-radius: 50px;
-                margin: 0 10px;
-                font-weight: bold;
-                font-size: 15px;
-              "
-            >
-              Export Streaks ↓
+          <div class="stats-actions">
+            <button id="export-csv-btn" class="action-btn export">
+              Export CSV
             </button>
-            <button
-              id="import-btn"
-              style="
-                background: #4c4cff;
-                color: white;
-                padding: 12px 24px;
-                border: none;
-                border-radius: 50px;
-                margin: 0 10px;
-                font-weight: bold;
-                font-size: 15px;
-              "
-            >
-              Import ↑
+            <button id="export-btn" class="action-btn export">
+              Export Backup
             </button>
+            <button id="import-btn" class="action-btn import">Import</button>
             <input
               type="file"
               id="import-file"
               accept=".json"
               style="display: none"
             />
+          </div>
+          <div class="stats-actions-hint">
+            CSV is for spreadsheets. Backup is for full restore.
           </div>
         </div>
       </div>
