@@ -108,6 +108,7 @@ function normalizeHabitsForToday() {
       currentPeriodStart: habit.currentPeriodStart,
       completedToday: habit.completedToday,
     };
+    syncHabitFromHistory(habit);
     updateProgress(habit);
     if (
       habit.doneToday !== before.doneToday ||
@@ -119,6 +120,131 @@ function normalizeHabitsForToday() {
     }
   });
   if (changed) saveHabits();
+}
+
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(key) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function syncHabitFromHistory(habit) {
+  if (!Array.isArray(habit.history) || habit.history.length === 0) {
+    if (habit.lastDoneDate) {
+      const legacy = new Date(habit.lastDoneDate);
+      if (!Number.isNaN(legacy.getTime())) {
+        habit.history = [formatDateKey(legacy)];
+      } else {
+        return;
+      }
+    } else {
+      return;
+    }
+  }
+
+  const history = new Set(habit.history);
+  const todayKey = formatDateKey(new Date());
+  const lastKey = [...history].sort().pop();
+  habit.doneToday = history.has(todayKey);
+  habit.lastDoneDate = lastKey ? parseDateKey(lastKey).toDateString() : null;
+}
+
+function rebuildHabitFromHistory(habit) {
+  const history = new Set(Array.isArray(habit.history) ? habit.history : []);
+  habit.history = [...history].sort();
+
+  const todayDate = new Date();
+  const todayKey = formatDateKey(todayDate);
+  const lastKey = habit.history.length
+    ? habit.history[habit.history.length - 1]
+    : null;
+
+  habit.doneToday = history.has(todayKey);
+  habit.lastDoneDate = lastKey ? parseDateKey(lastKey).toDateString() : null;
+
+  habit.currentPeriodStart = getCurrentPeriodStart(habit);
+  const periodStartDate = new Date(habit.currentPeriodStart);
+  const periodStartTime = new Date(
+    periodStartDate.getFullYear(),
+    periodStartDate.getMonth(),
+    periodStartDate.getDate(),
+  ).getTime();
+  const todayTime = new Date(
+    todayDate.getFullYear(),
+    todayDate.getMonth(),
+    todayDate.getDate(),
+  ).getTime();
+
+  habit.checksThisPeriod = habit.history.filter((key) => {
+    const time = parseDateKey(key).getTime();
+    return time >= periodStartTime && time <= todayTime;
+  }).length;
+
+  habit.completedToday = habit.doneToday && habit.checksThisPeriod > 0;
+
+  if (!lastKey) {
+    habit.streak = 0;
+  } else {
+    const lastDate = parseDateKey(lastKey);
+    const yesterday = new Date(
+      todayDate.getFullYear(),
+      todayDate.getMonth(),
+      todayDate.getDate() - 1,
+    );
+    const lastIsToday = formatDateKey(lastDate) === todayKey;
+    const lastIsYesterday =
+      formatDateKey(lastDate) === formatDateKey(yesterday);
+
+    if (!lastIsToday && !lastIsYesterday) {
+      habit.streak = 0;
+    } else {
+      let count = 0;
+      let cursor = lastDate;
+      while (history.has(formatDateKey(cursor))) {
+        count += 1;
+        cursor = new Date(
+          cursor.getFullYear(),
+          cursor.getMonth(),
+          cursor.getDate() - 1,
+        );
+      }
+      habit.streak = count;
+    }
+  }
+
+  let strength = 0;
+  if (habit.history.length) {
+    const startDate = parseDateKey(habit.history[0]);
+    let cursor = new Date(
+      startDate.getFullYear(),
+      startDate.getMonth(),
+      startDate.getDate(),
+    );
+    let lastDoneKey = null;
+
+    while (cursor <= todayDate) {
+      const key = formatDateKey(cursor);
+      const done = history.has(key);
+      if (done) {
+        strength = Math.min(100, strength + (100 - strength) * 0.1);
+        lastDoneKey = key;
+      } else if (lastDoneKey) {
+        strength = Math.max(0, strength * 0.99);
+      }
+      cursor = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth(),
+        cursor.getDate() + 1,
+      );
+    }
+  }
+  habit.strength = strength;
 }
 
 // Schedule definitions
@@ -253,7 +379,7 @@ function saveHabits() {
 async function writeHabitsForWidget() {
   if (!capacitorFilesystem) return;
   try {
-    const widgetDate = new Date().toISOString().slice(0, 10);
+    const widgetDate = formatDateKey(new Date());
     const total = habits.length;
     const done = habits.filter((h) => h.doneToday).length;
     const habitsList = habits.map((h) => ({
@@ -403,7 +529,13 @@ function renderStats() {
     const date = new Date();
     date.setDate(date.getDate() - i);
     const dateStr = date.toDateString();
-    const count = habits.filter((h) => h.lastDoneDate === dateStr).length;
+    const dateKey = formatDateKey(date);
+    const count = habits.filter((h) => {
+      if (Array.isArray(h.history) && h.history.length) {
+        return h.history.includes(dateKey);
+      }
+      return h.lastDoneDate === dateStr;
+    }).length;
     const intensity = count === 0 ? 0 : Math.min(Math.ceil(count / 2), 4);
     html += `<span class="day day-${intensity}" title="${date.toLocaleDateString()}: ${count}"></span>`;
     if (i % 15 === 0) html += "<br>";
@@ -417,7 +549,11 @@ function renderHabits() {
   list.innerHTML = "";
 
   habits.forEach((habit, index) => {
-    if (habit.lastDoneDate !== today) habit.doneToday = false;
+    if (Array.isArray(habit.history) && habit.history.length) {
+      syncHabitFromHistory(habit);
+    } else if (habit.lastDoneDate !== today) {
+      habit.doneToday = false;
+    }
     updateProgress(habit);
 
     const li = document.createElement("li");
@@ -487,6 +623,7 @@ function renderHabits() {
       menu.innerHTML = `
         <button class="edit-habit-btn">Edit Habit</button>
         <button class="edit-streak-btn">Edit Streak</button>
+        <button class="history-btn">History</button>
       `;
       document.body.appendChild(menu);
       const rect = e.target.getBoundingClientRect();
@@ -509,6 +646,11 @@ function renderHabits() {
         ev.stopPropagation();
         menu.remove();
         showEditStreakModal(habit, index);
+      };
+      menu.querySelector(".history-btn").onclick = (ev) => {
+        ev.stopPropagation();
+        menu.remove();
+        showHistoryModal(habit);
       };
     });
     // Modal for editing habit fields
@@ -658,9 +800,117 @@ function renderHabits() {
         modal.remove();
     }
 
+    function showHistoryModal(habit) {
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+
+      const history = new Set(
+        Array.isArray(habit.history) ? habit.history : [],
+      );
+      const todayDate = new Date();
+      const days = 90;
+      const gridKeys = new Set();
+      let grid = "";
+
+      const startDate = new Date(
+        todayDate.getFullYear(),
+        todayDate.getMonth(),
+        todayDate.getDate() - (days - 1),
+      );
+      const startDay = (startDate.getDay() + 6) % 7; // Monday=0
+      for (let i = 0; i < startDay; i += 1) {
+        grid += `<div class="history-day empty"></div>`;
+      }
+
+      const rangeLabel = `${startDate.toLocaleString("en-US", {
+        month: "short",
+      })} – ${todayDate.toLocaleString("en-US", { month: "short" })}`;
+
+      for (let i = days - 1; i >= 0; i -= 1) {
+        const date = new Date();
+        date.setDate(todayDate.getDate() - i);
+        const key = formatDateKey(date);
+        gridKeys.add(key);
+        const active = history.has(key) ? "on" : "";
+        const dayNumber = date.getDate();
+        grid += `
+          <button
+            class="history-day ${active}"
+            data-date="${key}"
+            title="${date.toDateString()}"
+            type="button"
+          >${dayNumber}</button>
+        `;
+      }
+
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 440px;">
+          <h3>History — <span style="color:${habit.color || "#4c4cff"}">${habit.name}</span></h3>
+          <div class="history-range">Last 90 days: ${rangeLabel}</div>
+          <div class="history-weekdays">
+            <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+          </div>
+          <div class="history-grid" style="--history-color: ${habit.color || "#4c4cff"};">
+            ${grid}
+          </div>
+          <div class="history-summary"></div>
+          <div class="history-actions">
+            <button id="save-history-btn" class="action-btn export">Save</button>
+            <button id="cancel-history-btn" class="action-btn import">Cancel</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const summary = modal.querySelector(".history-summary");
+      const updateSummary = () => {
+        const checked = [...history].filter((key) => gridKeys.has(key)).length;
+        summary.textContent = `${checked} of ${days} days checked`;
+      };
+      updateSummary();
+
+      modal.querySelectorAll(".history-day").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.date;
+          if (history.has(key)) {
+            history.delete(key);
+            btn.classList.remove("on");
+          } else {
+            history.add(key);
+            btn.classList.add("on");
+          }
+          updateSummary();
+        });
+      });
+
+      modal.querySelector("#save-history-btn").onclick = () => {
+        habit.history = [...history].sort();
+        rebuildHabitFromHistory(habit);
+        saveHabits();
+        renderHabits();
+        renderStats();
+        checkAchievements();
+        renderAchievements();
+        if (document.querySelector('[data-tab="stats"].active')) renderStats();
+        modal.remove();
+      };
+      modal.querySelector("#cancel-history-btn").onclick = () => modal.remove();
+    }
+
     li.querySelector(".habit-check").addEventListener("change", (e) => {
       const prev = habit.streak;
       habit.doneToday = e.target.checked;
+      const todayKey = formatDateKey(new Date());
+      if (Array.isArray(habit.history)) {
+        if (e.target.checked) {
+          habit.history = Array.from(new Set([...habit.history, todayKey]));
+        } else {
+          habit.history = habit.history.filter((key) => key !== todayKey);
+        }
+      } else if (e.target.checked) {
+        habit.history = [todayKey];
+      }
       if (e.target.checked) {
         if (!habit._preCheckState) {
           habit._preCheckState = {
@@ -922,6 +1172,7 @@ document.addEventListener("DOMContentLoaded", () => {
       currentPeriodStart: new Date().toDateString(),
       doneToday: false,
       lastDoneDate: null,
+      history: [],
     };
     habits.push(habit);
     saveHabits();

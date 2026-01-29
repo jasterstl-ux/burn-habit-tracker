@@ -599,6 +599,104 @@ body.dark .stats-actions-hint {
 .action-btn:hover {
   transform: translateY(-2px);
 }
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 28px);
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 0 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #f1f5f9;
+}
+
+.history-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 28px);
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.history-range {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin: 6px 0 4px;
+}
+
+body.dark .history-grid {
+  background: #f1f5f9;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.history-day {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #e5e7eb;
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-day.empty {
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.history-day.on {
+  background: var(--history-color, #4c4cff);
+  border-color: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
+  color: #fff;
+}
+
+.history-summary {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+}
+
+.history-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+body.dark .history-day {
+  background: #e5e7eb;
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #334155;
+}
+
+body.dark .history-day.on {
+  background: var(--history-color, #4c4cff);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
+  color: #ffffff;
+}
+
+body.dark .history-summary {
+  color: #666;
+}
+body.dark .history-weekdays {
+  color: #666;
+}
+
+body.dark .history-range {
+  color: #666;
+}
 .stat-value {
   font-size: 32px;
   color: #ff6b35;
